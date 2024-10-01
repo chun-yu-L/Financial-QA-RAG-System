@@ -1,0 +1,2 @@
+chromadb-client
+sentence_transformers
