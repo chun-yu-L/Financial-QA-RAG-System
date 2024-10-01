@@ -1,1 +1,9 @@
-.env
+# ignore
+*
+.gitignore
+
+# exceptions
+!*.py
+!README.md
+!env.template
+!requirements.txt
