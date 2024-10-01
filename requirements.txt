@@ -1,2 +1,4 @@
 chromadb-client
 sentence_transformers
+bcrypt
+python-dotenv
