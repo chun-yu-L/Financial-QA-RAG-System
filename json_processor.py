@@ -133,7 +133,7 @@ def process_faq_file(file_path: str) -> List[tuple[Document, str]]:
             answer_text = ' '.join(answers).strip()
             
             if question and answer_text:
-                section_questions += question
+                section_questions = section_questions + " " + question
                 qa_dict[question] = answer_text
         
         if qa_dict:
@@ -191,10 +191,14 @@ def load_faq_to_chromadb(
         try:
             docs_and_ids = process_faq_file(file_path)
             if docs_and_ids:
-                doc, doc_id = docs_and_ids[0]
-                all_documents.append(doc)
-                all_ids.append(doc_id)
-                files_processed[json_file] = len(doc.metadata['questions'])
+                # Process all documents from the file
+                for doc, doc_id in docs_and_ids:
+                    all_documents.append(doc)
+                    all_ids.append(doc_id)
+                
+                # Sum up the total questions across all sections
+                total_questions = sum(len(doc.metadata['questions']) for doc, _ in docs_and_ids)
+                files_processed[json_file] = total_questions
             
         except Exception as e:
             print(f"Error processing FAQ file {json_file}: {str(e)}")
