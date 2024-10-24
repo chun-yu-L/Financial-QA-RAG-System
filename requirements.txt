@@ -4,3 +4,4 @@ langchain-huggingface==0.1.0
 langchain-chroma==0.1.4
 pdfplumber
 python-dotenv
+tqdm
