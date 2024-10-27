@@ -99,29 +99,34 @@ def load_json_folder_to_chromadb(
 
 def main():
     load_dotenv()
-    client = QdrantClient(url=os.getenv("qdrant_url"))
+    client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
 
     ### 創一個 collection
     # 設定預設 sparse model
-    client.set_sparse_model(embedding_model_name="Qdrant/bm25")
+    client.set_sparse_model(
+        embedding_model_name="Qdrant/bm42-all-minilm-l6-v2-attentions"
+    )
 
     # 如果不存在，創建 collection
-    if not client.collection_exists("insurance_hybrid_bgeNbm25"):
+    if not client.collection_exists("insurance_hybrid_bgeNbm42"):
         client.create_collection(
-            collection_name="insurance_hybrid_bgeNbm25",
+            collection_name="insurance_hybrid_bgeNbm42",
             vectors_config=VectorParams(
                 size=1024, distance=Distance.COSINE
             ),  # BAAI/bge-m3 的參數設置 (FastEmbed 沒有所以自己設)
             sparse_vectors_config=client.get_fastembed_sparse_vector_params(),  # 前面設定的預設 sparse model 參數
+            on_disk_payload=True,
         )
 
     ### 做一個vector store
     vector_store = QdrantVectorStore(
         client=client,
-        collection_name="insurance_hybrid_bgeNbm25",
+        collection_name="insurance_hybrid_bgeNbm42",
         embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
-        sparse_embedding=FastEmbedSparse(model_name="Qdrant/bm25"),
-        sparse_vector_name="fast-sparse-bm25",
+        sparse_embedding=FastEmbedSparse(
+            model_name="Qdrant/bm42-all-minilm-l6-v2-attentions"
+        ),
+        sparse_vector_name="fast-sparse-bm42-all-minilm-l6-v2-attentions",
         retrieval_mode=RetrievalMode.HYBRID,
     )
 
