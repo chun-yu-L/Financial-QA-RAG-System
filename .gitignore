@@ -4,9 +4,8 @@
 
 # exceptions
 !*.py
-!output_prediction.ipynb
 !README.md
 !env.template
 !requirements.txt
 !utils
-!retriever/
+!retriever

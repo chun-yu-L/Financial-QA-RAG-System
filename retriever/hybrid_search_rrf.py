@@ -1,16 +1,19 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import List, Tuple, Union
+from typing import List, Sequence, Tuple, Union
 
 import jieba
 from dotenv import load_dotenv
+from langchain.retrievers.document_compressors import CrossEncoderReranker
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchValue
 from rank_bm25 import BM25Okapi
+from tqdm import tqdm
 
 
 @dataclass
@@ -106,7 +109,7 @@ class SearchFusion:
 
 # DENSE SEARCH
 def qdrant_dense_search(
-    question: dict, vector_store: QdrantVectorStore, k=3
+    question: dict, vector_store: QdrantVectorStore, k: int = 3
 ) -> List[Document]:
     filter_conditions = Filter(
         must=[
@@ -127,7 +130,7 @@ def qdrant_dense_search(
 
 
 # BM25 SEARCH
-def bm25_jieba_search(question: dict, corpus_dict: dict, k=3) -> List[str]:
+def bm25_jieba_search(question: dict, corpus_dict: dict, k: int = 3) -> List[str]:
     filtered_corpus = [corpus_dict[str(file)] for file in question["source"]]
     tokenized_corpus = [list(jieba.cut_for_search(doc)) for doc in filtered_corpus]
     bm25 = BM25Okapi(tokenized_corpus)
@@ -142,8 +145,8 @@ def bm25_jieba_search(question: dict, corpus_dict: dict, k=3) -> List[str]:
 
 
 def hybrid_search_rerank(
-    question: dict, vector_store: QdrantVectorStore, corpus_dict: dict
-):
+    question: dict, vector_store: QdrantVectorStore, corpus_dict: dict, k: int = 1
+) -> dict:
     dense_results = qdrant_dense_search(question, vector_store, k=3)
     bm25_result = bm25_jieba_search(question, corpus_dict, k=3)
 
@@ -151,15 +154,84 @@ def hybrid_search_rerank(
     fusion = SearchFusion(k=60)
     final_results = fusion.reciprocal_rank_fusion(dense_results, bm25_result)
 
-    # 返回第一個結果
+    # 返回結果列表
     if final_results:
         return {
             "qid": question["qid"],
-            "retrieve": int(final_results[0]),
+            "retrieve": [
+                int(final_results[i]) for i in range(min(k, len(final_results)))
+            ],
             "category": question["category"],
         }
     else:
-        return {"qid": question["qid"], "retrieve": -1, "category": "not found"}
+        return {"qid": question["qid"], "retrieve": [-1], "category": "not found"}
+
+
+def crosss_encoder_rerank(
+    question: dict,
+    documents: Sequence[Document],
+    cross_encoder_model: str = "BAAI/bge-reranker-v2-m3",
+    k: int = 1,
+) -> Sequence[Document]:
+    """
+    使用指定的 Cross-Encoder 模型對文件進行重新排序。
+
+    Args:
+        question (dict): 包含查詢問題的字典，'query' 字段應包含查詢的內容。
+        documents (Sequence[Document]): 待排序的文件列表。
+        cross_encoder_model (str, optional): 使用的 Cross-Encoder 模型名稱。預設為 'BAAI/bge-reranker-v2-m3'。
+        k (int, optional): 返回的前 k 個文件，預設為 1。
+
+    Returns:
+        Sequence[Document]: 經過模型重新排序後的文件列表。
+    """
+    model = HuggingFaceCrossEncoder(model_name=cross_encoder_model)
+    compressor = CrossEncoderReranker(model=model, top_n=k)
+    return compressor.compress_documents(documents=documents, query=question["query"])
+
+
+def retrieve_document_by_source_ids(
+    client: QdrantClient, collection_name: str, source_ids: List[int]
+) -> List[Document]:
+    """
+    從 Qdrant 擷取指定 source_id 的文件並轉換成 LangChain Document 格式
+    Args:
+        client: Qdrant client 實例
+        collection_name: 集合名稱
+        source_ids: 要擷取的文件 source_id 列表
+    Returns:
+        List[Document]: LangChain Document 物件列表
+    """
+    # 建立 filter 條件，使用 must 確保完全符合指定的 source_ids
+    filter_condition = Filter(
+        must=[
+            FieldCondition(
+                key="metadata.source_id",
+                match=MatchAny(any=[str(i) for i in source_ids]),
+            )
+        ]
+    )
+
+    # 使用 scroll 方法取得符合條件的所有文件
+    get_result = client.scroll(
+        collection_name=collection_name,
+        scroll_filter=filter_condition,
+        limit=len(source_ids),
+    )
+
+    # 將 Qdrant 的搜尋結果轉換成 LangChain Document 格式
+    documents = []
+    for record in get_result[0]:  # search_result[0] 包含實際的記錄
+        # 創建 Document 物件，保留所有 metadata
+        doc = Document(
+            page_content=record.payload.get(
+                "page_content", ""
+            ),  # 假設文本內容存儲在 'text' 欄位
+            metadata=record.payload.get("metadata", {}),
+        )
+        documents.append(doc)
+
+    return documents
 
 
 if __name__ == "__main__":
@@ -183,8 +255,34 @@ if __name__ == "__main__":
 
     answers = []
 
-    for Q in insurance_data:
-        answers.append(hybrid_search_rerank(Q, vector_store, corpus_dict))
+    for Q in tqdm(insurance_data, desc="Processing questions"):
+        hybrid_rank_result = hybrid_search_rerank(Q, vector_store, corpus_dict)
+        hybrid_docs = retrieve_document_by_source_ids(
+            client=client,
+            collection_name="insurance_hybrid_bgeNbm42",
+            source_ids=hybrid_rank_result["retrieve"],
+        )
+        encoder_rerank = crosss_encoder_rerank(Q, hybrid_docs)
+
+        if encoder_rerank:
+            query_result = encoder_rerank[0].metadata
+        else:
+            print(f"Find no answer for {Q['qid']}")
+            query_result = {
+                "category": "not found",
+                "file_source": "not found",
+                "page_number": -1,
+                "source": "-1",
+                "source_id": "-1",
+            }
+
+        answers.append(
+            {
+                "qid": Q["qid"],
+                "retrieve": int(query_result["source_id"]),
+                "category": query_result["category"],
+            }
+        )
 
     with open("./09_insurance_hybrid_rrf.json", "w") as Output:
         json.dump({"answers": answers}, Output, ensure_ascii=False, indent=4)
