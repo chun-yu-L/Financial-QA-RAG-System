@@ -10,14 +10,14 @@ from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
+from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchValue
 from rank_bm25 import BM25Okapi
 from tqdm import tqdm
 
 
-@dataclass
-class SearchResult:
+class SearchResult(BaseModel):
     source_id: str
     score: float
     rank: int
@@ -190,6 +190,18 @@ def crosss_encoder_rerank(
     return compressor.compress_documents(documents=documents, query=question["query"])
 
 
+def dense_search_with_cross_encoder(
+    vector_store: QdrantVectorStore,
+    question: dict,
+    k_dense: int,
+    k_cross: int = 1,
+) -> List[Document]:
+    dense_result = qdrant_dense_search(
+        vector_store=vector_store, question=question, k=k_dense
+    )
+    return crosss_encoder_rerank(question=question, documents=dense_result, k=k_cross)
+
+
 def retrieve_document_by_source_ids(
     client: QdrantClient, collection_name: str, source_ids: List[int]
 ) -> List[Document]:
@@ -235,54 +247,67 @@ def retrieve_document_by_source_ids(
 
 
 if __name__ == "__main__":
+    with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
+        question_set = json.load(q)
+
+    # qdrant vector store for different categories
     load_dotenv()
     client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
-    vector_store = QdrantVectorStore(
+    insurance_vector_store = QdrantVectorStore(
         client=client,
-        collection_name="insurance_hybrid_bgeNbm42",
+        collection_name="insurance_chunk",
         embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
         retrieval_mode=RetrievalMode.DENSE,
     )
+    faq_vector_store = QdrantVectorStore(
+        client=client,
+        collection_name="qa_dense_e5",
+        embedding=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
+        retrieval_mode=RetrievalMode.DENSE,
+    )
 
-    with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
-        question_set = json.load(q)
+    # insurance
     insurance_data = [
         item for item in question_set["questions"] if item["category"] == "insurance"
     ]
 
-    with open("insurance_fulltext/corpus_insurance.json", "r") as q:
-        corpus_dict = json.load(q)
-
-    answers = []
-
-    for Q in tqdm(insurance_data, desc="Processing questions"):
-        hybrid_rank_result = hybrid_search_rerank(Q, vector_store, corpus_dict)
-        hybrid_docs = retrieve_document_by_source_ids(
-            client=client,
-            collection_name="insurance_hybrid_bgeNbm42",
-            source_ids=hybrid_rank_result["retrieve"],
+    insurance_answers = []
+    for Q in tqdm(
+        insurance_data, desc=f"Processing {insurance_data[0]['category']} questions"
+    ):
+        insurance_search = dense_search_with_cross_encoder(
+            vector_store=insurance_vector_store,
+            question=Q,
+            k_dense=5,
         )
-        encoder_rerank = crosss_encoder_rerank(Q, hybrid_docs)
 
-        if encoder_rerank:
-            query_result = encoder_rerank[0].metadata
-        else:
-            print(f"Find no answer for {Q['qid']}")
-            query_result = {
-                "category": "not found",
-                "file_source": "not found",
-                "page_number": -1,
-                "source": "-1",
-                "source_id": "-1",
-            }
-
-        answers.append(
+        insurance_answers.append(
             {
                 "qid": Q["qid"],
-                "retrieve": int(query_result["source_id"]),
-                "category": query_result["category"],
+                "retrieve": int(insurance_search[0].metadata["source_id"]),
+                "category": insurance_search[0].metadata["category"],
             }
         )
 
-    with open("./09_insurance_hybrid_rrf.json", "w") as Output:
+    # faq
+    faq_data = [item for item in question_set["questions"] if item["category"] == "faq"]
+    faq_answers = []
+    for Q in tqdm(faq_data, desc=f"Processing {faq_data[0]['category']} questions"):
+        faq_search = qdrant_dense_search(
+            vector_store=faq_vector_store,
+            question=Q,
+            k=1,
+        )
+
+        faq_answers.append(
+            {
+                "qid": Q["qid"],
+                "retrieve": int(faq_search[0].metadata["source_id"]),
+                "category": faq_search[0].metadata["category"],
+            }
+        )
+
+    answers = insurance_answers + faq_answers
+
+    with open("./13_test.json", "w") as Output:
         json.dump({"answers": answers}, Output, ensure_ascii=False, indent=4)
