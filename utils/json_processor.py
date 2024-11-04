@@ -30,7 +30,8 @@ def process_json_file(file_path: str) -> List[tuple[Document, str]]:
             page_text = " ".join(lines)
             
             if page_text.strip():
-                doc_id = f"{source_id}_page_{page_number}"
+                category = os.path.splitext(os.path.basename(file_path))[0].replace('corpus_', '')
+                doc_id = f"{category}_{source_id}_page_{page_number}"
                 
                 page_metadata = {
                     **metadata,
