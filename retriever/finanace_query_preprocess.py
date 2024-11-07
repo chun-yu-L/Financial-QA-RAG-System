@@ -172,21 +172,22 @@ def create_finance_query_parser():
     return prompt | structured_llm
 
 
-def main():
+def query_preprocessor(finance_question_set):
     chain = create_finance_query_parser()
 
-    with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
-        question_set = json.load(q)
-    finance_data = [
-        item for item in question_set["questions"] if item["category"] == "finance"
-    ]
-
-    for Q in tqdm(finance_data):
+    for Q in tqdm(finance_question_set):
         Q["parsed_query"] = chain.invoke({"query": Q["query"]})
 
-    with open("./test_parsed_query_v4.json", "w") as output:
-        json.dump(finance_data, output, ensure_ascii=False, indent=4)
+    return finance_question_set
 
 
 if __name__ == "__main__":
-    main()
+    with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
+        question_set = json.load(q)
+    finance_question_set = [
+        item for item in question_set["questions"] if item["category"] == "finance"
+    ]
+    finance_question_set = query_preprocessor()
+    
+    with open("./test_parsed_query_v4.json", "w") as output:
+        json.dump(finance_question_set, output, ensure_ascii=False, indent=4)
