@@ -1,6 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
+from time import sleep
 from typing import List, Sequence, Tuple, Union
 
 import jieba
@@ -207,10 +208,21 @@ def dense_search_with_cross_encoder(
     k_dense: int,
     k_cross: int = 1,
 ) -> List[Document]:
-    dense_result = qdrant_dense_search(
-        vector_store=vector_store, question=question, k=k_dense
-    )
-    return crosss_encoder_rerank(question=question, documents=dense_result, k=k_cross)
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            dense_result = qdrant_dense_search(
+                vector_store=vector_store, question=question, k=k_dense
+            )
+            return crosss_encoder_rerank(
+                question=question, documents=dense_result, k=k_cross
+            )
+        except Exception as e:
+            if attempt < max_retries - 1:
+                print(f"Attempt {attempt + 1} failed: {e}. Retrying...")
+                sleep(1)
+            else:
+                raise
 
 
 def retrieve_document_by_source_ids(
