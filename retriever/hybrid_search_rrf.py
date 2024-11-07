@@ -23,6 +23,12 @@ class SearchResult(BaseModel):
     rank: int
 
 
+class QuestionDict(BaseModel):
+    source: List[int]
+    query: str
+    category: str
+
+
 class SearchFusion:
     def __init__(self, k: int = 60):
         """
@@ -109,7 +115,7 @@ class SearchFusion:
 
 # DENSE SEARCH
 def qdrant_dense_search(
-    question: dict, vector_store: QdrantVectorStore, k: int = 3
+    question: QuestionDict, vector_store: QdrantVectorStore, k: int = 3
 ) -> List[Document]:
     filter_conditions = Filter(
         must=[
@@ -130,7 +136,9 @@ def qdrant_dense_search(
 
 
 # BM25 SEARCH
-def bm25_jieba_search(question: dict, corpus_dict: dict, k: int = 3) -> List[str]:
+def bm25_jieba_search(
+    question: QuestionDict, corpus_dict: dict, k: int = 3
+) -> List[str]:
     filtered_corpus = [corpus_dict[str(file)] for file in question["source"]]
     tokenized_corpus = [list(jieba.cut_for_search(doc)) for doc in filtered_corpus]
     bm25 = BM25Okapi(tokenized_corpus)
@@ -145,7 +153,10 @@ def bm25_jieba_search(question: dict, corpus_dict: dict, k: int = 3) -> List[str
 
 
 def hybrid_search_rerank(
-    question: dict, vector_store: QdrantVectorStore, corpus_dict: dict, k: int = 1
+    question: QuestionDict,
+    vector_store: QdrantVectorStore,
+    corpus_dict: dict,
+    k: int = 1,
 ) -> dict:
     dense_results = qdrant_dense_search(question, vector_store, k=3)
     bm25_result = bm25_jieba_search(question, corpus_dict, k=3)
@@ -168,7 +179,7 @@ def hybrid_search_rerank(
 
 
 def crosss_encoder_rerank(
-    question: dict,
+    question: QuestionDict,
     documents: Sequence[Document],
     cross_encoder_model: str = "BAAI/bge-reranker-v2-m3",
     k: int = 1,
@@ -192,7 +203,7 @@ def crosss_encoder_rerank(
 
 def dense_search_with_cross_encoder(
     vector_store: QdrantVectorStore,
-    question: dict,
+    question: QuestionDict,
     k_dense: int,
     k_cross: int = 1,
 ) -> List[Document]:
