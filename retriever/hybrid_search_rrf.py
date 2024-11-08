@@ -227,7 +227,6 @@ def crosss_encoder_rerank(
     return compressor.compress_documents(documents=documents, query=question["query"])
 
 
-@retry(retries=3, delay=1)
 def dense_search_with_cross_encoder(
     vector_store: QdrantVectorStore,
     question: QuestionDict,

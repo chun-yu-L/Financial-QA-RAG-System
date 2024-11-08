@@ -5,7 +5,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
-from langchain.core.document import Document
+from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient

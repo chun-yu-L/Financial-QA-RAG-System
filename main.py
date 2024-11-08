@@ -22,26 +22,15 @@ def main():
     # qdrant vector store for different categories
     load_dotenv()
     client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
-    insurance_vector_store = QdrantVectorStore(
+
+    ###### insurance ######
+    vector_store = QdrantVectorStore(
         client=client,
         collection_name="insurance_chunk",
         embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
         retrieval_mode=RetrievalMode.DENSE,
     )
-    finance_vector_store = QdrantVectorStore(
-        client=client,
-        collection_name="finance_recursive_chunk",
-        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
-        retrieval_mode=RetrievalMode.DENSE,
-    )
-    faq_vector_store = QdrantVectorStore(
-        client=client,
-        collection_name="qa_dense_e5",
-        embedding=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
-        retrieval_mode=RetrievalMode.DENSE,
-    )
 
-    ###### insurance ######
     insurance_data = [
         item for item in question_set["questions"] if item["category"] == "insurance"
     ]
@@ -51,7 +40,7 @@ def main():
         insurance_data, desc=f"Processing {insurance_data[0]['category']} questions"
     ):
         insurance_search = dense_search_with_cross_encoder(
-            vector_store=insurance_vector_store,
+            vector_store=vector_store,
             question=Q,
             k_dense=5,
         )
@@ -65,6 +54,13 @@ def main():
         )
 
     ###### finance #####
+    vector_store = QdrantVectorStore(
+        client=client,
+        collection_name="finance_recursive_chunk",
+        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+        retrieval_mode=RetrievalMode.DENSE,
+    )
+
     finance_question_set = [
         item for item in question_set["questions"] if item["category"] == "finance"
     ]
@@ -78,7 +74,7 @@ def main():
         finance_question_set,
         desc=f"Processing {finance_question_set[0]['category']} questions",
     ):
-        finance_search = finance_main(finance_vector_store, Q, doc_set)
+        finance_search = finance_main(vector_store, Q, doc_set)
         finance_answers.append(
             {
                 "qid": Q["qid"],
@@ -88,11 +84,18 @@ def main():
         )
 
     ###### faq #####
+    vector_store = QdrantVectorStore(
+        client=client,
+        collection_name="qa_dense_e5",
+        embedding=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
+        retrieval_mode=RetrievalMode.DENSE,
+    )
+
     faq_data = [item for item in question_set["questions"] if item["category"] == "faq"]
     faq_answers = []
     for Q in tqdm(faq_data, desc=f"Processing {faq_data[0]['category']} questions"):
         faq_search = qdrant_dense_search(
-            vector_store=faq_vector_store,
+            vector_store=vector_store,
             question=Q,
             k=1,
         )
