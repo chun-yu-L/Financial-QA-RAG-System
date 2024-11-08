@@ -78,12 +78,12 @@ def main():
         finance_question_set,
         desc=f"Processing {finance_question_set[0]['category']} questions",
     ):
-        finance_answer = finance_main(finance_vector_store, Q, doc_set)
+        finance_search = finance_main(finance_vector_store, Q, doc_set)
         finance_answers.append(
             {
                 "qid": Q["qid"],
-                "retrieve": finance_answer,
-                "category": Q["category"],
+                "retrieve": int(finance_search[0].metadata["source_id"]),
+                "category": finance_search[0].metadata["category"],
             }
         )
 
@@ -109,6 +109,7 @@ def main():
 
     with open("./retrieval_result.json", "w") as Output:
         json.dump({"answers": answers}, Output, ensure_ascii=False, indent=4)
+
 
 if __name__ == "__main__":
     main()

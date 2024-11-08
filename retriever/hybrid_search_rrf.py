@@ -1,6 +1,6 @@
 import json
 import os
-from dataclasses import dataclass
+from functools import wraps
 from time import sleep
 from typing import List, Sequence, Tuple, Union
 
@@ -16,6 +16,29 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchValue
 from rank_bm25 import BM25Okapi
 from tqdm import tqdm
+
+
+def retry(retries: int = 3, delay: float = 1):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            _retries, _delay = retries, delay
+            for attempt in range(1, _retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except Exception as e:
+                    if attempt < _retries:
+                        print(
+                            f"{func.__name__} 第 {attempt} 次嘗試失敗：{e}。等待 {_delay} 秒後重試..."
+                        )
+                        sleep(_delay)
+                    else:
+                        print(f"{func.__name__} 嘗試 {attempt} 次失敗，放棄重試。")
+                        raise
+
+        return wrapper
+
+    return decorator
 
 
 class SearchResult(BaseModel):
@@ -115,6 +138,7 @@ class SearchFusion:
 
 
 # DENSE SEARCH
+@retry(retries=3, delay=1)
 def qdrant_dense_search(
     question: QuestionDict, vector_store: QdrantVectorStore, k: int = 3
 ) -> List[Document]:
@@ -179,6 +203,7 @@ def hybrid_search_rerank(
         return {"qid": question["qid"], "retrieve": [-1], "category": "not found"}
 
 
+@retry(retries=3, delay=1)
 def crosss_encoder_rerank(
     question: QuestionDict,
     documents: Sequence[Document],
@@ -202,29 +227,19 @@ def crosss_encoder_rerank(
     return compressor.compress_documents(documents=documents, query=question["query"])
 
 
+@retry(retries=3, delay=1)
 def dense_search_with_cross_encoder(
     vector_store: QdrantVectorStore,
     question: QuestionDict,
     k_dense: int,
     k_cross: int = 1,
 ) -> List[Document]:
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            dense_result = qdrant_dense_search(
-                vector_store=vector_store, question=question, k=k_dense
-            )
-            return crosss_encoder_rerank(
-                question=question, documents=dense_result, k=k_cross
-            )
-        except Exception as e:
-            if attempt < max_retries - 1:
-                print(f"Attempt {attempt + 1} failed: {e}. Retrying...")
-                sleep(1)
-            else:
-                raise
+    dense_result = qdrant_dense_search(
+        vector_store=vector_store, question=question, k=k_dense
+    )
+    return crosss_encoder_rerank(question=question, documents=dense_result, k=k_cross)
 
-
+@retry(retries=3, delay=1)
 def retrieve_document_by_source_ids(
     client: QdrantClient, collection_name: str, source_ids: List[int]
 ) -> List[Document]:

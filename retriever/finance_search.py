@@ -1,9 +1,11 @@
 import json
 import os
+from typing import List
 
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
+from langchain.core.document import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
@@ -131,7 +133,7 @@ def get_matched_source(combined_results, question):
     return question["source"]
 
 
-def finance_main(vector_store, question, doc_set, score_threshold=90):
+def finance_main(vector_store, question, doc_set, score_threshold=90) -> List[Document]:
     targets = question["source"]  # get all source list from this question
 
     main_string = filter_docs(targets, doc_set)  # get docs accroding to source list
