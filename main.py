@@ -1,3 +1,28 @@
+"""
+Main execution script for the finance-related data retrieval project.
+
+This script loads question data, connects to Qdrant vector stores,
+and performs dense search with various preprocessors and retrievers.
+
+Requires:
+    - Environment variables specified in a .env file, particularly Qdrant URL.
+
+Modules:
+    - HuggingFaceEmbeddings
+    - QdrantVectorStore
+    - RetrievalMode
+    - qdrant_client
+    - tqdm
+    - query_preprocessor (finance-specific query preprocessing)
+    - dense_search_with_cross_encoder
+    - finance_main (main search function)
+    - qdrant_dense_search (Qdrant-based dense search)
+
+Attributes:
+    logging.basicConfig: Configures logging to log.txt for standardized logging.
+
+"""
+
 import json
 import os
 import logging
@@ -16,12 +41,33 @@ from retriever.search_core import (
     qdrant_dense_search,
 )
 
-logging.basicConfig(level=logging.INFO, filename='log.txt',
-	format='[%(asctime)s %(levelname)-8s] %(message)s',
-	datefmt='%Y%m%d %H:%M:%S',
-	)
+logging.basicConfig(
+    level=logging.INFO,
+    filename="log.txt",
+    format="[%(asctime)s %(levelname)-8s] %(message)s",
+    datefmt="%Y%m%d %H:%M:%S",
+)
+
 
 def main():
+    """
+    Main function to load question data, initialize Qdrant client,
+    and set up vector stores for various categories.
+
+    This function loads question examples from a JSON file, initializes
+    a QdrantClient with a specified timeout, and configures vector stores for
+    different search categories like insurance, finance, and faq.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        FileNotFoundError: If the questions file is not found.
+        Exception: For any connection or initialization issues.
+    """
     with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
         question_set = json.load(q)
 

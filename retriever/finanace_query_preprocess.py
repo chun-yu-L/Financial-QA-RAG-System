@@ -1,3 +1,18 @@
+"""
+This module provides functionality to preprocess financial data queries, primarily by transforming user input into a structured format
+for further data processing and retrieval. The module defines a `QueryDict` TypedDict structure to represent key components of a
+financial query, including fields for the company name, year, season (quarter), specific information to query, and a list of relevant keywords.
+
+The primary function, `create_finance_query_parser`, initializes a language model with custom prompts tailored to handle financial
+terminology, especially in the Chinese language. It returns a query parsing pipeline that interprets user input in a standardized format.
+
+Classes:
+    QueryDict: A TypedDict representing the components of a financial query.
+
+Functions:
+    create_finance_query_parser: Configures and returns a parser that structures financial queries for streamlined data retrieval.
+"""
+
 import json
 from typing import List
 
@@ -8,6 +23,8 @@ from typing_extensions import Annotated, TypedDict
 
 
 class QueryDict(TypedDict):
+    """A TypedDict representing the components of a financial query, including company name, year, season, scenario, and keywords."""
+
     company: Annotated[str, ..., "公司名稱"]
     year: Annotated[str, ..., "年份"]
     season: Annotated[str, ..., "季度"]
@@ -16,6 +33,14 @@ class QueryDict(TypedDict):
 
 
 def create_finance_query_parser():
+    """
+    Creates a structured query parser for financial data requests, converting user queries into a structured format
+    with fields like company name, year, quarter, main query, and relevant keywords. Uses a language model configured
+    with example prompts to handle finance-specific terminology and output in Chinese.
+
+    Returns:
+        A prompt pipeline that processes financial queries into a structured format for easy data retrieval.
+    """
     llm = ChatLlamaCpp(
         temperature=0,
         model_path="qwen2.5-3b-instruct-q8_0.gguf",
@@ -173,6 +198,15 @@ def create_finance_query_parser():
 
 
 def query_preprocessor(finance_question_set):
+    """
+    Preprocess a list of finance questions and parse them into structured format
+
+    Args:
+        finance_question_set (list[dict]): A list of dictionaries, each contains a question and its category
+
+    Returns:
+        list[dict]: The input list with an additional key "parsed_query" containing the structured output from the language model
+    """
     chain = create_finance_query_parser()
 
     for Q in tqdm(finance_question_set):
@@ -188,6 +222,6 @@ if __name__ == "__main__":
         item for item in question_set["questions"] if item["category"] == "finance"
     ]
     finance_question_set = query_preprocessor(finance_question_set)
-    
+
     with open("./test_parsed_query_v4.json", "w") as output:
         json.dump(finance_question_set, output, ensure_ascii=False, indent=4)

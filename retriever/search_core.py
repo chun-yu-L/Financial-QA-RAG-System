@@ -1,3 +1,13 @@
+"""
+Module for document retrieval and search functionality using embeddings,
+vector stores, and various matching algorithms like BM25 and fuzzy matching.
+
+This module integrates several libraries and services such as Qdrant for
+vector storage, rapidfuzz for fuzzy text matching, and BM25 for ranking.
+It includes a retry mechanism and defines classes and functions to facilitate
+document search, filtering, and ranking operations.
+"""
+
 import json
 import os
 from functools import wraps
@@ -22,6 +32,18 @@ from tqdm import tqdm
 
 
 def retry(retries: int = 3, delay: float = 1):
+    """
+    A retry decorator that wraps a function and retries it up to a specified
+    number of times with a specified delay between attempts.
+
+    Args:
+        retries (int): Number of retry attempts.
+        delay (float): Delay between retries in seconds.
+
+    Returns:
+        callable: A decorator that applies retry logic to the wrapped function.
+    """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -45,6 +67,8 @@ def retry(retries: int = 3, delay: float = 1):
 
 
 class ParsedQuery(BaseModel):
+    """Represents a parsed query structure with details for searching."""
+
     company: str
     year: str
     season: str
@@ -53,6 +77,8 @@ class ParsedQuery(BaseModel):
 
 
 class QuestionDict(BaseModel):
+    """Represents a structured question with associated metadata and parsed query information."""
+
     qid: str
     source: List[int]
     query: str
@@ -61,12 +87,16 @@ class QuestionDict(BaseModel):
 
 
 class StandardizedResult(BaseModel):
+    """Represents a standardized search result with source ID, score, and rank."""
+
     source_id: str
     score: float
     rank: int
 
 
 class FuzzyTermMatch(BaseModel):
+    """Represents a fuzzy match result for a search term within a document."""
+
     search_term: str
     matched_text: str
     doc_id: str
@@ -74,6 +104,8 @@ class FuzzyTermMatch(BaseModel):
 
 
 class FuzzySearchResult(BaseModel):
+    """Represents the result of a fuzzy search across multiple terms within a document."""
+
     doc_id: str
     matched_text: str
     avg_score: float
@@ -84,6 +116,18 @@ class FuzzySearchResult(BaseModel):
 
 
 class SearchFusion:
+    """
+    搜尋結果融合器，使用 Reciprocal Rank Fusion (RRF) 方法將 dense vector search 和 BM25 搜尋的結果進行融合。
+
+    Attributes:
+        k (int): RRF的k參數，用於控制排名靠後結果的影響力。
+
+    Methods:
+        _convert_dense_results: 轉換 dense search 的結果為標準格式。
+        _convert_bm25_results: 轉換 BM25 的結果為標準格式。
+        reciprocal_rank_fusion: 使用 RRF 方法融合 dense search 和 BM25 搜尋的結果。
+    """
+
     def __init__(self, k: int = 60):
         """
         初始化搜尋結果融合器
@@ -172,6 +216,21 @@ class SearchFusion:
 
 
 class FuzzySearchEngine:
+    """
+    Fuzzy Search Engine for finding matches in a document collection based on similarity thresholds.
+
+    Attributes:
+        similarity_threshold (float): Minimum similarity score for considering a fuzzy match.
+        score_threshold (float): Threshold for filtering final search scores.
+        max_matches (int): Maximum number of matches to return for each search term.
+
+    Methods:
+        _filter_documents_by_ids: Filters documents by a specified list of IDs.
+        _extract_matched_sources: Extracts matched document sources based on combined search results.
+        fuzzy_search: Conducts a fuzzy search on documents using multiple search terms.
+        search: Performs the main search process, combining fuzzy matching with additional filters.
+    """
+
     def __init__(
         self,
         similarity_threshold: float = 50,
@@ -179,12 +238,12 @@ class FuzzySearchEngine:
         max_matches: int = 3,
     ):
         """
-        Initialize the search engine.
+        Initializes the fuzzy search engine with specified parameters.
 
         Args:
-            similarity_threshold: Minimum similarity score for fuzzy matching
-            score_threshold: Threshold for final score filtering
-            max_matches: Maximum number of matches to return per term
+            similarity_threshold (float): Minimum similarity score for fuzzy matching.
+            score_threshold (float): Threshold for final score filtering.
+            max_matches (int): Maximum number of matches to return per search term.
         """
         self.similarity_threshold = similarity_threshold
         self.score_threshold = score_threshold
@@ -193,19 +252,54 @@ class FuzzySearchEngine:
     def _filter_documents_by_ids(
         self, target_ids: List[str], document_collection: Dict[str, str]
     ) -> pd.Series:
-        """Filter documents based on target IDs."""
+        """
+        Filters documents based on specified target IDs.
+
+        Args:
+            target_ids (List[str]): List of document IDs to filter.
+            document_collection (Dict[str, str]): Dictionary of all documents with IDs as keys.
+
+        Returns:
+            pd.Series: Series containing filtered documents with the specified IDs.
+        """
         target_id_set = set(str(id_) for id_ in target_ids)
         filtered_docs = {
             k: v for k, v in document_collection.items() if k in target_id_set
         }
         return pd.Series(filtered_docs)
 
+    def _extract_matched_sources(
+        self, combined_results: pd.DataFrame, question: QuestionDict
+    ) -> List[str]:
+        """
+        Extracts document sources from search results or falls back to the question source.
+
+        Args:
+            combined_results (pd.DataFrame): DataFrame with search results.
+            question (QuestionDict): Dictionary containing the search question and metadata.
+
+        Returns:
+            List[str]: List of document source IDs.
+        """
+        if not combined_results.empty and "doc_id" in combined_results.columns:
+            return [doc_id.split("_")[0] for doc_id in combined_results["doc_id"]]
+        return question["source"]
+
     def fuzzy_search(
         self,
         documents: pd.Series,
         search_terms: pd.Series,
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Perform fuzzy search across documents with multiple search terms."""
+        """
+        Performs a fuzzy search across documents with multiple search terms, calculating scores for each term.
+
+        Args:
+            documents (pd.Series): Series of documents to search.
+            search_terms (pd.Series): Series of search terms.
+
+        Returns:
+            Tuple[pd.DataFrame, pd.DataFrame]: DataFrames containing individual term matches and combined results.
+        """
         term_matches = []
         document_scores: Dict[str, List[float]] = {}
 
@@ -272,28 +366,20 @@ class FuzzySearchEngine:
 
         return term_results, combined_df
 
-    def _extract_matched_sources(
-        self, combined_results: pd.DataFrame, question: QuestionDict
-    ) -> List[str]:
-        """Extract document sources from search results or fall back to question source."""
-        if not combined_results.empty and "doc_id" in combined_results.columns:
-            return [doc_id.split("_")[0] for doc_id in combined_results["doc_id"]]
-        return question["source"]
-
     def search(
         self,
         question: QuestionDict,
         doc_set: Dict[str, str],
     ) -> QuestionDict:
         """
-        Main search method combining fuzzy and dense search.
+        Main search method that combines fuzzy search and document filtering.
 
         Args:
-            question: Search question containing query and metadata
-            doc_set: Collection of documents to search in
+            question (QuestionDict): Dictionary containing the search question with parsed query and metadata.
+            doc_set (Dict[str, str]): Dictionary of documents with IDs as keys.
 
         Returns:
-            List of search results
+            QuestionDict: Updated question dictionary with search results populated in the source.
         """
         # Filter and prepare documents
         filtered_docs = self._filter_documents_by_ids(question["source"], doc_set)
@@ -330,6 +416,18 @@ class FuzzySearchEngine:
 def qdrant_dense_search(
     question: QuestionDict, vector_store: QdrantVectorStore, k: int = 3
 ) -> List[Document]:
+    """
+    Perform dense search using Qdrant
+
+    Args:
+        question: Search question containing query and metadata
+        vector_store: QdrantVectorStore instance to perform search on
+        k: Number of results to return
+
+    Returns:
+        List of Document objects containing search results
+    """
+
     filter_conditions = Filter(
         must=[
             FieldCondition(
@@ -352,6 +450,17 @@ def qdrant_dense_search(
 def bm25_jieba_search(
     question: QuestionDict, corpus_dict: dict, k: int = 3
 ) -> List[str]:
+    """
+    Perform BM25 search using jieba tokenization on a given corpus and query.
+
+    Args:
+        question: Search question containing query and metadata
+        corpus_dict: Dictionary mapping file names to text content
+        k: Number of results to return
+
+    Returns:
+        List of document IDs that are the top k results
+    """
     filtered_corpus = [corpus_dict[str(file)] for file in question["source"]]
     tokenized_corpus = [list(jieba.cut_for_search(doc)) for doc in filtered_corpus]
     bm25 = BM25Okapi(tokenized_corpus)
@@ -371,6 +480,22 @@ def hybrid_search_rerank(
     corpus_dict: dict,
     k: int = 1,
 ) -> dict:
+    """
+    Hybrid search method that combines dense search and BM25 search.
+
+    Performs a dense search using Qdrant and a BM25 search using jieba tokenization.
+    The results are then fused using a SearchFusion instance with Reciprocal Rank Fusion (RRF).
+    The final results are returned as a dictionary with the qid and retrieve list.
+
+    Args:
+        question (QuestionDict): Dictionary containing the search question with parsed query and metadata.
+        vector_store (QdrantVectorStore): QdrantVectorStore instance to perform search on.
+        corpus_dict (dict): Dictionary mapping file names to text content.
+        k (int, optional): Number of results to return. Defaults to 1.
+
+    Returns:
+        dict: Dictionary containing the qid and retrieve list.
+    """
     dense_results = qdrant_dense_search(question, vector_store, k=3)
     bm25_result = bm25_jieba_search(question, corpus_dict, k=3)
 
@@ -422,7 +547,16 @@ def finance_main(
     score_threshold: float = 90,
 ) -> List[Document]:
     """
-    Main entry point for document search and retrieval.
+    finance 的搜尋引擎，首先使用 fuzzy search 來初步 filter 文件，然後使用 dense vector search with cross encoder 進一步限縮範圍。
+
+    Args:
+        vector_store (QdrantVectorStore): Qdrant 的向量庫實例。
+        question (QuestionDict): 包含查詢問題的字典，'query' 字段應包含查詢的內容。
+        doc_set (Dict[str, str]): 文件的 ID 到內容的映射。
+        score_threshold (float, optional):  Fuzzy search 的分數門檻，預設為 90。
+
+    Returns:
+        List[Document]: 經過排序後的文件列表。
     """
     search_engine = FuzzySearchEngine(
         similarity_threshold=50, score_threshold=score_threshold, max_matches=3
@@ -442,6 +576,19 @@ def dense_search_with_cross_encoder(
     k_dense: int,
     k_cross: int = 1,
 ) -> List[Document]:
+    """
+    Perform a dense search using Qdrant and rerank the results with a Cross-Encoder model.
+
+    Args:
+        vector_store (QdrantVectorStore): The vector store used to perform the dense search.
+        question (QuestionDict): Dictionary containing the search question with parsed query and metadata.
+        k_dense (int): Number of top dense search results to retrieve.
+        k_cross (int, optional): Number of top results to return after Cross-Encoder reranking. Defaults to 1.
+
+    Returns:
+        List[Document]: The list of documents after reranking with the Cross-Encoder.
+    """
+
     dense_result = qdrant_dense_search(
         vector_store=vector_store, question=question, k=k_dense
     )

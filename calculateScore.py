@@ -1,8 +1,30 @@
+"""
+This module provides functions to calculate the Precision@1 score for predictions compared
+against ground truths across multiple categories. The results are saved in a specified output file.
+
+Functions:
+    calculate_precision_at_1(ground_truths_path, predictions_path, output_file):
+        Computes the Precision@1 metric, categorizing results and tracking wrong predictions for each category.
+"""
+
 import argparse
 import json
 
 
 def calculate_precision_at_1(ground_truths_path, predictions_path, output_file):
+    """
+    Calculates the Precision@1 score by comparing predictions to ground truths for each question ID (qid).
+    The function organizes results by category, tallying correct answers and identifying incorrect predictions
+    for each category.
+
+    Args:
+        ground_truths_path (str): Path to the JSON file containing ground truth answers.
+        predictions_path (str): Path to the JSON file with model predictions.
+        output_file (str): Path to save the output JSON file containing categorized Precision@1 results.
+
+    Returns:
+        None: Saves the results to the specified output file in JSON format.
+    """
     # Load ground truths and predictions
     with open(ground_truths_path, "r") as f:
         ground_truths = json.load(f)["ground_truths"]
