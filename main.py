@@ -1,5 +1,7 @@
 import json
 import os
+import logging
+from datetime import datetime
 
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -8,12 +10,16 @@ from qdrant_client import QdrantClient
 from tqdm import tqdm
 
 from retriever.finanace_query_preprocess import query_preprocessor
-from retriever.finance_search import finance_main
 from retriever.hybrid_search_rrf import (
     dense_search_with_cross_encoder,
+    finance_main,
     qdrant_dense_search,
 )
 
+logging.basicConfig(level=logging.INFO, filename='log.txt',
+	format='[%(asctime)s %(levelname)-8s] %(message)s',
+	datefmt='%Y%m%d %H:%M:%S',
+	)
 
 def main():
     with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
@@ -65,6 +71,10 @@ def main():
         item for item in question_set["questions"] if item["category"] == "finance"
     ]
     finance_question_set = query_preprocessor(finance_question_set=finance_question_set)
+    # Save the parsed query
+    time_now = datetime.now().strftime("%Y_%m_%d_%H_%M")
+    with open(f"parsed_query_{time_now}.json", "w") as Output:
+        json.dump(finance_question_set, Output, ensure_ascii=False, indent=4)
 
     with open("./finance_extract_directly_patched.json", "r") as q:
         doc_set = json.load(q)
@@ -74,7 +84,7 @@ def main():
         finance_question_set,
         desc=f"Processing {finance_question_set[0]['category']} questions",
     ):
-        finance_search = finance_main(vector_store, Q, doc_set)
+        finance_search = finance_main(vector_store, Q, doc_set, score_threshold=70)
         finance_answers.append(
             {
                 "qid": Q["qid"],
@@ -112,6 +122,7 @@ def main():
 
     with open("./retrieval_result.json", "w") as Output:
         json.dump({"answers": answers}, Output, ensure_ascii=False, indent=4)
+        print("Done!")
 
 
 if __name__ == "__main__":

@@ -187,7 +187,7 @@ if __name__ == "__main__":
     finance_question_set = [
         item for item in question_set["questions"] if item["category"] == "finance"
     ]
-    finance_question_set = query_preprocessor()
+    finance_question_set = query_preprocessor(finance_question_set)
     
     with open("./test_parsed_query_v4.json", "w") as output:
         json.dump(finance_question_set, output, ensure_ascii=False, indent=4)
