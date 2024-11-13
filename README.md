@@ -1,55 +1,58 @@
 # Financial-QA-RAG-System
 
+此專案使用 Retrieval Augmented Generation (RAG) 的架構來進行金融問答，結合 Langchain 框架與 Qdrant 向量資料庫進行資料處理、檢索與生成，並採用了多階段檢索提高檢索準確度。
 
-## ChromaDB Deployment Process
+## 專案流程
+### 1. 資料前處理 (Preprocess)
+- 取出 pdf 內文字並進行清洗、標註
 
-This section outlines the steps required to deploy and authenticate ChromaDB using Docker, as well as how to connect to the ChromaDB server via Python.
+- 將大段文字切割為小塊 (chunking) 並匯入 Qdrant 向量資料庫中
 
-### 1. Download the ChromaDB Image
-Start by pulling the latest ChromaDB image from Docker Hub:
+- 此步驟為獨立執行，未包含於 `main.py` 中
+
+### 2. 檔案檢索 (Model)
+- 透過 Qdrant 進行密集向量檢索，取得最能回答 query 的文件與編號
+
+- 對於 insurance 資料進一步透過 cross encoder reranker 進行重排，提高檢索準確度
+
+- 針對 finance 相關查詢，先利用 llama-cpp-python 跑地端小型 LLM 進行解析。接著用提取出的關鍵字進行模糊搜尋快速找出關鍵財報文件。若多個文檔符合關鍵字，搭配 dense search 與 reranker 做語義檢索取得最相關文件
+
+## 環境設置
+1. 環境需求
+    - Python 3.9 以上
+    - 安裝所需 python 套件  
+        ```bash
+        pip install -r requirements.txt
+        ```
+        若 llama-cpp-python 安裝失敗，參考[官方](https://github.com/abetlen/llama-cpp-python?tab=readme-ov-file)安裝環境設置
+
+    - Qdrant 向量資料庫
+        - 安裝參考[官方指南](https://qdrant.tech/documentation/guides/installation/)或 Preprocess 資料夾 README
+        - `.env` 設置連線參數
+
+2. 模型下載  
+本專案使用 Qwen2.5-3B-Instruct-GGUF 模型進行財報相關 query 前處理。使用前先至 [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) 下載對應模型並放置於頂層資料夾
+
+## 使用說明
+### 資料前處理
+此步驟需要單獨執行，用於將原始資料清洗、切塊並匯入 Qdrant 資料庫。
+
+1. 於 `.env` 檔設置 Qdrant 連線參數，設置方法參考 env.template
+
+2. faq 資料已為文字 json 直接透過對應檔案匯入 Qdrant
+    ```bash
+    python load_to_Qdrant_qa.py
+    ```
+
+3. 將 pdf 檔利用利用##########
+
+4. 取出文字之財報 (finance) 相關文件，利用 `load_to_Qdrant_finance.py` 切塊並匯入向量資料庫
+
+5. 提取出之 insurance 透過 `split_insurance_section.py` 根據章節進行切塊，並將輸出利用 `load_to_Qdrant_insurance.py` 標註 metadata 後匯入向量資料庫
+
+### 啟動查詢檢索
+`main.py` 包含查詢的預處理與檢索流程。執行指令如下：
 ```bash
-docker pull chromadb/chroma:latest
+python main.py --questions_path {path_to_question} --parsed_finance_path {path_to_finance_json}
 ```
-
-### 2. Create Authentication Credentials
-Create a password for authentication and save it in the container:
-```bash
-sudo docker run --rm --entrypoint htpasswd httpd:2 -Bbn ADMIN YOURPASSWORD > server.htpasswd
-sudo docker cp server.htpasswd chromaDB:/server.htpasswd
-```
-- `ADMIN`: The username for authentication.
-- `YOURPASSWORD`: The password for the chosen username.
-
-### 3. Run the ChromaDB Server
-Start the ChromaDB server with authentication by running the following command:
-```bash
-docker run -d -v ./server.htpasswd:/chroma/server.htpasswd \
-    -e CHROMA_SERVER_AUTHN_CREDENTIALS_FILE="server.htpasswd" \
-    -e CHROMA_SERVER_AUTHN_PROVIDER="chromadb.auth.basic_authn.BasicAuthenticationServerProvider" \
-    -p 7878:8000 \
-    chromadb/chroma:latest
-```
-This command mounts the `server.htpasswd` file, enabling basic authentication on the ChromaDB server.
-
-### 4. Connect to the ChromaDB Server from a Python Client
-To connect to the ChromaDB server using a Python client, you can use the following setup:
-
-```python
-from chromadb import HttpClient
-from chromadb.config import Settings
-
-chroma_client = HttpClient(
-    settings=Settings(
-        chroma_client_auth_provider="chromadb.auth.basic_authn.BasicAuthClientProvider",
-        chroma_client_auth_credentials=f"{chromadb_user}:{chromadb_pwd}",
-    ),
-    host=chromadb_host,
-    port=7878,
-)
-```
-- `chroma_client_auth_provider`: Specifies the authentication provider.
-- `chroma_client_auth_credentials`: Combines the username and password for authentication.
-- `host`: The address of the ChromaDB server.
-- `port`: The port the ChromaDB server is running on (`7878`).
-
-Ensure that `chroma_client_auth_credentials` contains the correct credentials in the format `username:password`.
+- 執行完會產生 `retrieval_result.json` 檔案為檢索結果
