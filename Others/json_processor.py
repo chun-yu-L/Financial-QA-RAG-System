@@ -1,6 +1,6 @@
 import json
 import os
-from typing import List, Dict, Any
+from typing import List, Dict
 from tqdm import tqdm
 from langchain_core.documents import Document
 

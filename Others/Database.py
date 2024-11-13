@@ -1,5 +1,4 @@
 import os
-from typing import List, Dict, Any, Optional, Union
 
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
@@ -7,7 +6,6 @@ from langchain_huggingface import HuggingFaceEmbeddings
 
 import chromadb
 from chromadb.config import Settings
-from chromadb.api.types import QueryResult
 
 
 class ChromaDB:
