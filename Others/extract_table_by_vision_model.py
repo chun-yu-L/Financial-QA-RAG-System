@@ -1,18 +1,14 @@
 from typing import List, Optional
 from pathlib import Path
-from datetime import datetime
 from dotenv import load_dotenv
 
-from langchain_openai import AzureChatOpenAI # langchain-openai == 0.1.25
-from langchain_core.prompts import PromptTemplate # langchain == 0.2.16
-from langchain_core.output_parsers import StrOutputParser
+from langchain_openai import AzureChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 import mimetypes
 import time
 import json
 import base64
-import requests
 import fnmatch
 import logging
 import os
@@ -98,7 +94,7 @@ def process_images_in_batches(
                     # Convert local image to data URL
                     image_data_url = convert_image_to_data_url(image_path)
                     if not image_data_url:
-                        logging.error(f"Skipping {image_path} due to conversion error: {str(e)}")
+                        logging.error(f"Skipping {image_path} due to conversion error")
                         break
 
                     # Append to user content for LLM input
@@ -222,7 +218,8 @@ def main():
 
     # Iterate and get LLM responses
     for doc_num in image_paths:
-        page_size = len(image_paths[doc_num])
+        # page_size = len(image_paths[doc_num])
+        delay = 70
 
         total_results = process_images_in_batches(
             image_paths=image_paths[doc_num],
@@ -231,7 +228,7 @@ def main():
             file_number=doc_num,
             # batch_size=page_size,
             batch_size=3, # notice the endpoint rate limit
-            delay=70,
+            delay=delay,
             output_dir=output_dir
         )
 
@@ -240,9 +237,9 @@ def main():
             json.dump(total_results, f, ensure_ascii=False, indent=4)
 
         logging.info(f"Processed {len(total_results)} docs successfully")
-        logging.info(f"Sleeping for 70 seconds before next documents...")
+        logging.info(f"Sleeping for {delay} seconds before next documents...")
         print(f"Processed {len(total_results)} docs successfully")
-        print(f"Sleeping for 70 seconds before next documents...")
+        print(f"Sleeping for {delay} seconds before next documents...")
         time.sleep(70)
 
 
