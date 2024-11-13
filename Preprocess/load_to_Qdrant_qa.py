@@ -1,3 +1,24 @@
+"""
+This module processes FAQ JSON files, generates vector embeddings for the text, and loads the data into a Qdrant vector store for efficient similarity-based retrieval.
+
+The module includes the following functionalities:
+
+1. `process_faq_file(file_path: str)`: Processes a single FAQ JSON file to create a list of `Document` objects and their IDs, where each document represents a unique section in the FAQ file.
+2. `load_faq_to_chromadb(folder_path: str, vector_store, batch_size: int)`: Loads all FAQ JSON files from a specified folder and saves the processed data into the specified ChromaDB vector store.
+3. `main()`: Initializes the Qdrant client, creates a collection if necessary, and loads FAQ data from a given folder into the Qdrant vector store in batches.
+
+Modules used:
+- `dotenv`: Loads environment variables, specifically for Qdrant URL configuration.
+- `langchain_core.documents` and `langchain_huggingface`: Supports document and embedding creation.
+- `qdrant_client`: Manages the Qdrant vector store and collection configuration.
+
+Usage:
+- To execute this script, ensure environment variables are set (e.g., Qdrant URL), then run the module directly.
+
+Example:
+    python load_to_Qdrant_qa.py
+"""
+
 import json
 import os
 from typing import Dict, List
@@ -16,80 +37,77 @@ def process_faq_file(file_path: str) -> List[tuple[Document, str]]:
     """
     Process a single FAQ JSON file and return a list of Documents and their IDs.
     Creates a separate document for each numbered section in the FAQ file.
-    
+
     Args:
         file_path (str): Path to the FAQ JSON file
-    
+
     Returns:
         List[tuple[Document, str]]: List of (Document, ID) tuples
     """
-    with open(file_path, 'r', encoding='utf-8') as file:
+    with open(file_path, "r", encoding="utf-8") as file:
         data = json.load(file)
-    
+
     file_name = os.path.basename(file_path)
     documents_and_ids = []
-    
+
     for source_id, qa_list in data.items():
         # Collect all questions and create the content dictionary for this section
-        section_questions = ''
+        section_questions = ""
         qa_dict = {}
-        
+
         for qa_item in qa_list:
-            question = qa_item.get('question', '').strip()
-            answers = qa_item.get('answers', [])
-            answer_text = ' '.join(answers).strip()
-            
+            question = qa_item.get("question", "").strip()
+            answers = qa_item.get("answers", [])
+            answer_text = " ".join(answers).strip()
+
             if question and answer_text:
                 section_questions = section_questions + " " + question
                 qa_dict[question] = answer_text
-        
+
         if qa_dict:
-            
             # Create metadata
             metadata = {
-                'category': 'faq',
-                'file_source': file_name,
-                'source_id': source_id,
-                'questions': section_questions
+                "category": "faq",
+                "file_source": file_name,
+                "source_id": source_id,
+                "questions": section_questions,
             }
-            
+
             # Create document
             doc = Document(
-                page_content=json.dumps(qa_dict, ensure_ascii=False),
-                metadata=metadata
+                page_content=json.dumps(qa_dict, ensure_ascii=False), metadata=metadata
             )
-            
+
             documents_and_ids.append((doc, str(uuid4())))
-    
+
     return documents_and_ids
 
+
 def load_faq_to_chromadb(
-    folder_path: str,
-    vector_store,
-    batch_size: int = 100
+    folder_path: str, vector_store, batch_size: int = 100
 ) -> Dict[str, int]:
     """
     Load all FAQ JSON files from a folder and save them to ChromaDB
-    
+
     Args:
         folder_path (str): Path to the folder containing FAQ JSON files
         vector_store (Chroma): Initialized ChromaDB vector store
         batch_size (int): Number of documents to process at once
-    
+
     Returns:
         Dict[str, int]: Dictionary with filenames and number of questions processed
     """
     all_documents = []
     all_ids = []
     files_processed = {}
-    
+
     # Get all JSON files in the folder
-    json_files = [f for f in os.listdir(folder_path) if f.endswith('.json')]
-    
+    json_files = [f for f in os.listdir(folder_path) if f.endswith(".json")]
+
     if not json_files:
         print(f"No JSON files found in {folder_path}")
         return files_processed
-    
+
     # Process each FAQ JSON file
     for json_file in json_files:
         file_path = os.path.join(folder_path, json_file)
@@ -100,31 +118,51 @@ def load_faq_to_chromadb(
                 for doc, doc_id in docs_and_ids:
                     all_documents.append(doc)
                     all_ids.append(doc_id)
-                
+
                 # Sum up the total questions across all sections
-                total_questions = sum(len(doc.metadata['questions']) for doc, _ in docs_and_ids)
+                total_questions = sum(
+                    len(doc.metadata["questions"]) for doc, _ in docs_and_ids
+                )
                 files_processed[json_file] = total_questions
-            
+
         except Exception as e:
             print(f"Error processing FAQ file {json_file}: {str(e)}")
             continue
-    
+
     # Save all documents to ChromaDB in batches
-    total_batches = len(all_documents) // batch_size + (1 if len(all_documents) % batch_size != 0 else 0)
-    
-    for i in tqdm(range(0, len(all_documents), batch_size), desc="Saving FAQ to ChromaDB", total=total_batches):
-        batch_documents = all_documents[i:i + batch_size]
-        batch_ids = all_ids[i:i + batch_size]
-        
-        vector_store.add_documents(
-            documents=batch_documents,
-            ids=batch_ids
-        )
-    
+    total_batches = len(all_documents) // batch_size + (
+        1 if len(all_documents) % batch_size != 0 else 0
+    )
+
+    for i in tqdm(
+        range(0, len(all_documents), batch_size),
+        desc="Saving FAQ to ChromaDB",
+        total=total_batches,
+    ):
+        batch_documents = all_documents[i : i + batch_size]
+        batch_ids = all_ids[i : i + batch_size]
+
+        vector_store.add_documents(documents=batch_documents, ids=batch_ids)
+
     return files_processed
 
 
 def main():
+    """
+    Main entry point for loading the FAQ JSON files in the given folder to Qdrant.
+
+    This function loads the FAQ JSON files in the given folder, creates a Qdrant
+    collection if it doesn't exist, and then uploads the content of the FAQ files to
+    Qdrant in batches.
+
+    Args:
+        folder_path (str): The path to the folder containing the FAQ JSON files
+        vector_store (QdrantVectorStore): The Qdrant vector store to upload to
+        batch_size (int): The number of documents to upload in each batch
+
+    Returns:
+        None
+    """
     load_dotenv()
     client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
 

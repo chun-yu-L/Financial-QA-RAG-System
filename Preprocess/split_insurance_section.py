@@ -1,7 +1,23 @@
+"""
+This module provides a utility function to split text into structured sections
+based on a specific pattern and returns the structured sections as a JSON-formatted
+string. It is intended for processing legal or insurance text documents that contain
+labeled sections marked by phrases such as "第...條". The structured output is saved in json.
+"""
+
 import re
 import json
 
 def split_by_section(text):
+    """
+    Split a given text into sections by matching the pattern "\n第.{1,7}條".
+
+    Args:
+        text (str): The text to be split.
+
+    Returns:
+        list[dict]: A list of dictionaries, each representing a section. Each dictionary contains the keys "title", "sequence_number", and "content".
+    """
     pattern = r"\n第.{1,7}條"  # Pattern to match sections like \n第...條
     matches = re.split(f"({pattern})", text)  # Split and keep delimiters
 

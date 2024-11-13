@@ -1,3 +1,28 @@
+"""
+This module processes JSON data containing insurance document chunks, extracts relevant metadata,
+and loads the structured data into a Qdrant vector store for efficient retrieval. The module utilizes 
+HuggingFace embeddings and interacts with the QdrantClient to handle vector storage and retrieval configurations.
+
+Key Functions:
+    - process_insurance_chunk_json(file_path): Reads a JSON file containing insurance data chunks, extracts metadata, 
+    and formats it into a list of tuples containing Document objects and unique IDs.
+    - load_data_to_qdrant(documents_and_ids): Loads the processed document data into the Qdrant vector store, 
+    configuring the storage with specified vector parameters and distance metrics.
+
+Dependencies:
+    - QdrantClient: For interaction with the Qdrant vector database.
+    - HuggingFaceEmbeddings: For generating embeddings from text data.
+    - tqdm: For displaying a progress bar during data processing.
+    - dotenv: For loading environment variables necessary for Qdrant configuration.
+
+Environment Variables:
+    This module expects environment variables for Qdrant API access, which are loaded via `dotenv`.
+
+Usage Example:
+    Run this module directly to execute the main function, which performs the entire data processing and uploading
+    workflow.
+"""
+
 import json
 import os
 from typing import Dict, List
@@ -15,7 +40,7 @@ from tqdm import tqdm
 # Save title and sequence_number to metadata
 # Input json from the output of split_insurance_section.py
 def process_insurance_chunk_json(file_path: str) -> List[tuple[Document, str]]:
-    '''
+    """
     Sample
     metadata: {
         "category":"insurance"
@@ -24,7 +49,7 @@ def process_insurance_chunk_json(file_path: str) -> List[tuple[Document, str]]:
         "sequence_number":7
         "file_source":"insurance_chunk.json"
     }
-    '''
+    """
     with open(file_path, "r", encoding="utf-8") as file:
         data = json.load(file)
 
@@ -33,29 +58,27 @@ def process_insurance_chunk_json(file_path: str) -> List[tuple[Document, str]]:
     for source_id, content in tqdm(
         data.items(), desc=f"Processing {os.path.basename(file_path)}"
     ):
-        metadata = content.get('metadata', {})
-        sections = content.get('sections', [])
+        metadata = content.get("metadata", {})
+        sections = content.get("sections", [])
 
         for section in sections:
-            title = section.get('title', 0)
-            sequence_number = section.get('sequence_number', 0)
-            section_content = section.get('content','')
-            
+            title = section.get("title", 0)
+            sequence_number = section.get("sequence_number", 0)
+            section_content = section.get("content", "")
+
             section_metadata = {
                 **metadata,
-                'title': title,
-                'sequence_number': sequence_number,
-                'file_source': os.path.basename(file_path)
+                "title": title,
+                "sequence_number": sequence_number,
+                "file_source": os.path.basename(file_path),
             }
-            
-            doc = Document(
-                page_content=section_content,
-                metadata=section_metadata
-            )
-            
+
+            doc = Document(page_content=section_content, metadata=section_metadata)
+
             documents_and_ids.append((doc, str(uuid4())))
 
     return documents_and_ids
+
 
 def load_json_to_qdrant(
     folder_path: str, vector_store, batch_size: int = 50
@@ -117,6 +140,21 @@ def load_json_to_qdrant(
 
 
 def main():
+    """
+    Main entry point for loading the json files in the given folder to Qdrant.
+
+    This function loads the json files in the given folder, creates a Qdrant
+    collection if it doesn't exist, and then uploads the content of the json
+    files to Qdrant in batches.
+
+    Args:
+        folder_path (str): The path to the folder containing the json files
+        vector_store (QdrantVectorStore): The Qdrant vector store to upload to
+        batch_size (int): The number of documents to upload in each batch
+
+    Returns:
+        None
+    """
     load_dotenv()
     client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
 
