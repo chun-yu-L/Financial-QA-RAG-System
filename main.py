@@ -23,9 +23,10 @@ Attributes:
 
 """
 
+import argparse
 import json
-import os
 import logging
+import os
 from datetime import datetime
 
 from dotenv import load_dotenv
@@ -49,7 +50,7 @@ logging.basicConfig(
 )
 
 
-def main():
+def main(question_set, doc_set):
     """
     Main function to load question data, initialize Qdrant client,
     and set up vector stores for various categories.
@@ -59,7 +60,8 @@ def main():
     different search categories like insurance, finance, and faq.
 
     Args:
-        None
+        question_set: query questions with qid, query, and category
+        doc_set: finance {"id":"context"}
 
     Returns:
         None
@@ -68,8 +70,6 @@ def main():
         FileNotFoundError: If the questions file is not found.
         Exception: For any connection or initialization issues.
     """
-    with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
-        question_set = json.load(q)
 
     # qdrant vector store for different categories
     load_dotenv()
@@ -122,9 +122,6 @@ def main():
     with open(f"parsed_query_{time_now}.json", "w") as Output:
         json.dump(finance_question_set, Output, ensure_ascii=False, indent=4)
 
-    with open("./finance_extract_directly_patched.json", "r") as q:
-        doc_set = json.load(q)
-
     finance_answers = []
     for Q in tqdm(
         finance_question_set,
@@ -172,4 +169,29 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Process paths for question and finance document sets."
+    )
+
+    parser.add_argument(
+        "--questions_path",
+        type=str,
+        default="./競賽資料集/dataset/preliminary/questions_example.json",
+        help="Path to the questions JSON file",
+    )
+    parser.add_argument(
+        "--parsed_finance_path",
+        type=str,
+        default="./finance_extract_directly_patched.json",
+        help="Path to the parsed finance documents JSON file",
+    )
+
+    args = parser.parse_args()
+
+    with open(args.questions_path, "r") as q:
+        question_set = json.load(q)
+
+    with open(args.docs_path, "r") as d:
+        doc_set = json.load(d)
+
+    main(question_set, doc_set)
