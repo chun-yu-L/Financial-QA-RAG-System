@@ -7,5 +7,5 @@
 !README.md
 !env.template
 !requirements.txt
-!utils
-!retriever
+!Preprocess
+!Model

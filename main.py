@@ -34,8 +34,8 @@ from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
 from tqdm import tqdm
 
-from retriever.finanace_query_preprocess import query_preprocessor
-from retriever.search_core import (
+from Model.finanace_query_preprocess import query_preprocessor
+from Model.search_core import (
     dense_search_with_cross_encoder,
     finance_main,
     qdrant_dense_search,
