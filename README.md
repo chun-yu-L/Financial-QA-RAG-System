@@ -69,3 +69,4 @@
 python main.py --questions_path {path_to_question} --parsed_finance_path {path_to_finance_json}
 ```
 - 執行完會產生 `retrieval_result.json` 檔案為檢索結果
+- 接著使用 `calculateScore.py` 搭配正確答案集(ground_truths)可計算 `Precision@1 score`

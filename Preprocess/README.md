@@ -1,5 +1,7 @@
 
 ## 目錄結構
+- `pdf_to_text.py` :最初步處理，將PDF檔案萃取文字並轉換為 JSON 格式待後續使用。
+
 - `split_insurance_section.py`：用於分割保險相關的資料段落，並產出供 `load_to_Qdrant_insurance_chunk.py` 使用的輸入資料。
 
 - `load_to_Qdrant_finance_chunk.py`：負責將財務相關的資料段落載入至 Qdrant 資料庫中。
@@ -9,12 +11,17 @@
 - `load_to_Qdrant_qa.py`：負責載入 FAQ 資料至 Qdrant 資料庫中。
 
 ## 使用說明
-### 1. 分割保險資料段落
+### 1. 初步萃取PDF內容
+執行 `pdf_to_text.py` 將PDF檔案萃取文字並轉換為 JSON 格式待後續使用。
+```
+python pdf_to_text.py --source_path ./競賽資料集/reference/ --output_path ./
+```
+### 2. 分割保險資料段落
 執行 `split_insurance_section.py` 來處理並分割保險資料段落，結果將會產生輸入資料，供後續的 `load_to_Qdrant_insurance_chunk.py` 使用。
 ```bash
 python split_insurance_section.py
 ```
-### 2. 載入資料至 Qdrant
+### 3. 載入資料至 Qdrant
 各個 `load_to_Qdrant` 模組可以單獨執行，將對應的資料載入至 Qdrant 資料庫中。
 
 - 載入財務資料段落：
