@@ -1,3 +1,41 @@
+"""
+PDF Text Processor
+=================
+Features:
+---------
+- Extracts text from PDF files while preserving proper formatting
+- Special handling for Chinese character spacing
+- Processes multiple PDFs with progress tracking
+- Organizes extracted text into separate insurance and finance corpora
+- Saves processed text as structured JSON files
+
+Dependencies:
+------------
+- pdfplumber: For PDF text extraction
+- argparse: For command-line argument parsing
+
+Usage:
+------
+Run the script from command line with required arguments:
+    python script.py --output_path <output_directory> --source_path <source_directory>
+
+The source directory should contain two subdirectories:
+- insurance/: Contains insurance-related PDF files
+- finance/: Contains finance-related PDF files
+
+Output:
+-------
+The script generates two JSON files in the specified output directory:
+- raw_json/corpus_insurance.json: Contains extracted text from insurance PDFs
+- corpus_finance.json: Contains extracted text from finance PDFs
+
+Each JSON file contains a dictionary mapping document names to their extracted text content.
+
+Example:
+--------
+    python pdf_to_text.py --source_path ./競賽資料集/reference/ --output_path ./
+"""
+
 import os
 import re
 import json
