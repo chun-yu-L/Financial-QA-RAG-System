@@ -38,17 +38,30 @@
 此步驟需要單獨執行，用於將原始資料清洗、切塊並匯入 Qdrant 資料庫。
 
 1. 於 `.env` 檔設置 Qdrant 連線參數，設置方法參考 env.template
+   - 若架設於本地端可直接設定 qdrant_url='http://localhost:6333/'
 
 2. faq 資料已為文字 json 直接透過對應檔案匯入 Qdrant
+    - 先將`競賽資料集`資料夾放入`Preprocess/`路徑下
     ```bash
+    # 預設於 Preprocess/ 路徑下執行
     python load_to_Qdrant_qa.py
     ```
 
-3. 將 pdf 檔利用利用##########
+3. 利用 `pdf_to_text.py` 萃取 pdf 檔案中的文字資訊，並依照 `{"document_id" : "content"}` 存為 json 格式
+    - 註1:執行前須先於 `Preprocess/` 資料夾下建立 `raw_json/` 以及 `chunk_json/` 兩個資料夾作為輸出存放
+    - 註2:部分檔案內文缺漏使用人工手打補缺
+    ```bash
+    # 預設於 Preprocess/ 路徑下執行
+    python pdf_to_text.py --source_path ./競賽資料集/reference/ --output_path ./
+    ```
 
 4. 取出文字之財報 (finance) 相關文件，利用 `load_to_Qdrant_finance.py` 切塊並匯入向量資料庫
 
-5. 提取出之 insurance 透過 `split_insurance_section.py` 根據章節進行切塊，並將輸出利用 `load_to_Qdrant_insurance.py` 標註 metadata 後匯入向量資料庫
+5. 提取出之 insurance 文字透過 `split_insurance_section.py` 根據章節進行切塊，並將輸出利用 `load_to_Qdrant_insurance.py` 標註 metadata 後匯入向量資料庫
+    ```bash
+    # 預設於 Preprocess/ 路徑下執行
+    python split_insurance_section.py
+    ```
 
 ### 啟動查詢檢索
 `main.py` 包含查詢的預處理與檢索流程。執行指令如下：
