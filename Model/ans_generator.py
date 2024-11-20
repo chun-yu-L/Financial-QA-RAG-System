@@ -1,37 +1,31 @@
+from typing import List
+
+from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
+
 from Model.prompts import PROMPTS
-from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchValue
 
 
-def format_docs(docs):
-    return "\n\n".join(doc.page_content for doc in docs)
+def format_docs(docs: List[Document]):
+    return "\n".join(doc.page_content for doc in docs)
 
 
-def get_qa_answer(question, llm, vector_store):
-    ## retrieve
-    filter_conditions = Filter(
-        must=[
-            FieldCondition(
-                key="metadata.category",
-                match=MatchValue(value=question["category"]),
-            ),
-            FieldCondition(
-                key="metadata.source_id",
-                match=MatchAny(any=[str(i) for i in question["source"]]),
-            ),
-        ]
-    )
+def get_qa_answer(question, llm, retrieved_docs: List[Document]):
+    prompt_mapping = {
+        "faq": PROMPTS["faq_ans"],
+    }
 
-    retriever = vector_store.as_retriever(
-        search_type="similarity", search_kwargs={"filter": filter_conditions, "k": 1}
-    )
+    prompt = prompt_mapping.get(question["category"])
 
-    ## prompt
-    prompt = PROMPTS["faq_ans"]
+    if not prompt:
+        raise ValueError(f"Unsupported category: {question['category']}")
 
     chain = (
-        {"context": retriever | format_docs, "question": RunnablePassthrough()}
+        {
+            "context": lambda x: format_docs(retrieved_docs),
+            "question": RunnablePassthrough(),
+        }
         | prompt
         | llm
         | StrOutputParser()
