@@ -11,9 +11,10 @@ def format_docs(docs: List[Document]):
     return "\n".join(doc.page_content for doc in docs)
 
 
-def get_qa_answer(question, llm, retrieved_docs: List[Document]):
+def answer_generation(question, llm, retrieved_docs: List[Document]):
     prompt_mapping = {
         "faq": PROMPTS["faq_ans"],
+        "insurance": PROMPTS["insurance_ans"]
     }
 
     prompt = prompt_mapping.get(question["category"])
