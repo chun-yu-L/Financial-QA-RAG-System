@@ -32,6 +32,7 @@ def answer_generation(question, retrieved_docs: List[Document], llm_kwargs=None)
         "max_token": 400,
         "n_gpu_layers": -1,
         "n_batch": 128,
+        "verbose": False,
     }
 
     if llm_kwargs:
@@ -39,7 +40,11 @@ def answer_generation(question, retrieved_docs: List[Document], llm_kwargs=None)
 
     llm = ChatLlamaCpp(**default_llm_params)
 
-    prompt_mapping = {"faq": PROMPTS["faq_ans"], "insurance": PROMPTS["insurance_ans"]}
+    prompt_mapping = {
+        "faq": PROMPTS["faq_ans"],
+        "finance": PROMPTS["finance_ans"],
+        "insurance": PROMPTS["insurance_ans"],
+    }
 
     prompt = prompt_mapping.get(question["category"])
 

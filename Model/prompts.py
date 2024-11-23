@@ -36,6 +36,26 @@ faq_ans_prompt = ChatPromptTemplate(
     ]
 )
 
+finance_ans_prompt = ChatPromptTemplate(
+    [
+        ("system", ANS_SYSTEM_PROMPT),
+        (
+            "human",
+            """
+            你是一位精通財務分析的專家，專門解答財務報表相關問題。回答時，請根據以下<財報資料>內容，並特別注意表格中的數據，提供精確且專業的答案。
+
+            問題：{question}
+
+            <財報資料>
+            {context}
+            <財報資料>
+
+            專家回答：
+            """,
+        )
+    ]
+)
+
 insurance_ans_prompt = ChatPromptTemplate(
     [
         ("system", ANS_SYSTEM_PROMPT),
@@ -60,5 +80,6 @@ insurance_ans_prompt = ChatPromptTemplate(
 # 提供 import 的接口
 PROMPTS = {
     "faq_ans": faq_ans_prompt,
+    "finance_ans": finance_ans_prompt,
     "insurance_ans": insurance_ans_prompt
 }

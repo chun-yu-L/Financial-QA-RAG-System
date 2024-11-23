@@ -2,6 +2,8 @@ import argparse
 import json
 import logging
 import os
+from copy import deepcopy
+from datetime import datetime
 
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -10,7 +12,12 @@ from qdrant_client import QdrantClient
 from tqdm import tqdm
 
 from Model.ans_generator import answer_generation
-from Model.search_core import dense_search_with_cross_encoder, qdrant_dense_search
+from Model.finanace_query_preprocess import query_preprocessor
+from Model.search_core import (
+    dense_search_with_cross_encoder,
+    finance_main,
+    qdrant_dense_search,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +28,8 @@ logging.basicConfig(
 
 
 def main(question_set, doc_set):
+    start_time = datetime.now()
+
     load_dotenv()
     client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
 
@@ -50,19 +59,20 @@ def main(question_set, doc_set):
         insurance_answers.append(
             {
                 "qid": Q["qid"],
+                "query": Q["query"],
                 "generate": answer_generation(Q, insurance_search),
                 "retrieve": int(insurance_search[0].metadata["source_id"]),
                 "category": insurance_search[0].metadata["category"],
             }
         )
 
-    # ###### finance #####
-    # vector_store = QdrantVectorStore(
-    #     client=client,
-    #     collection_name="finance_recursive_chunk",
-    #     embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
-    #     retrieval_mode=RetrievalMode.DENSE,
-    # )
+    ###### finance #####
+    vector_store = QdrantVectorStore(
+        client=client,
+        collection_name="finance_recursive_chunk",
+        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+        retrieval_mode=RetrievalMode.DENSE,
+    )
 
     # finance_question_set = [
     #     item for item in question_set["questions"] if item["category"] == "finance"
@@ -73,19 +83,33 @@ def main(question_set, doc_set):
     # with open(f"parsed_query_{time_now}.json", "w") as Output:
     #     json.dump(finance_question_set, Output, ensure_ascii=False, indent=4)
 
-    # finance_answers = []
-    # for Q in tqdm(
-    #     finance_question_set,
-    #     desc=f"Processing {finance_question_set[0]['category']} questions",
-    # ):
-    #     finance_search = finance_main(vector_store, Q, doc_set, score_threshold=70)
-    #     finance_answers.append(
-    #         {
-    #             "qid": Q["qid"],
-    #             "retrieve": int(finance_search[0].metadata["source_id"]),
-    #             "category": finance_search[0].metadata["category"],
-    #         }
-    #     )
+    with open("parsed_query_2024_11_23_16_43.json", "r") as q:
+        finance_question_set = json.load(q)
+
+    finance_answers = []
+    for Q in tqdm(
+        finance_question_set,
+        desc=f"Processing {finance_question_set[0]['category']} questions",
+    ):
+        Q_copy = deepcopy(Q)
+        finance_search = finance_main(vector_store, Q_copy, doc_set, score_threshold=70)
+        Q["source"] = [finance_search[0].metadata["source_id"]]
+        vector_store = QdrantVectorStore(
+            client=client,
+            collection_name="finance_table_and_summary",
+            embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+            retrieval_mode=RetrievalMode.DENSE,
+        )
+        finance_retrieve = qdrant_dense_search(Q, vector_store, k=1)
+        finance_answers.append(
+            {
+                "qid": Q["qid"],
+                "query": Q["query"],
+                "generate": answer_generation(Q, finance_retrieve),
+                "retrieve": int(finance_retrieve[0].metadata["source_id"]),
+                "category": finance_retrieve[0].metadata["category"],
+            }
+        )
 
     ###### faq #####
     vector_store = QdrantVectorStore(
@@ -107,18 +131,21 @@ def main(question_set, doc_set):
         faq_answers.append(
             {
                 "qid": Q["qid"],
+                "query": Q["query"],
                 "generate": answer_generation(Q, faq_search),
                 "retrieve": int(faq_search[0].metadata["source_id"]),
                 "category": faq_search[0].metadata["category"],
             }
         )
 
-    # answers = insurance_answers + finance_answers + faq_answers
-    answers = insurance_answers + faq_answers
+    answers = insurance_answers + finance_answers + faq_answers
 
     with open("./generation_result.json", "w") as Output:
         json.dump({"answers": answers}, Output, ensure_ascii=False, indent=4)
-        print("Done!")
+
+    end_time = datetime.now()
+
+    print(f"Total time: {end_time - start_time}")
 
 
 if __name__ == "__main__":
@@ -129,7 +156,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--questions_path",
         type=str,
-        default="./競賽資料集/dataset/preliminary/questions_example.json",
+        default="./複賽資料集說明/questions_example.json",
         help="Path to the questions JSON file",
     )
     parser.add_argument(
