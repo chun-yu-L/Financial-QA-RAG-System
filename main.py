@@ -91,21 +91,21 @@ def main(question_set, doc_set):
         finance_question_set,
         desc=f"Processing {finance_question_set[0]['category']} questions",
     ):
+        finance_search = finance_main(vector_store, Q, doc_set, score_threshold=70)
         Q_copy = deepcopy(Q)
-        finance_search = finance_main(vector_store, Q_copy, doc_set, score_threshold=70)
-        Q["source"] = [finance_search[0].metadata["source_id"]]
+        Q_copy["source"] = [finance_search[0].metadata["source_id"]]
         vector_store = QdrantVectorStore(
             client=client,
             collection_name="finance_table_and_summary",
             embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
             retrieval_mode=RetrievalMode.DENSE,
         )
-        finance_retrieve = qdrant_dense_search(Q, vector_store, k=1)
+        finance_retrieve = qdrant_dense_search(Q_copy, vector_store, k=1)
         finance_answers.append(
             {
-                "qid": Q["qid"],
-                "query": Q["query"],
-                "generate": answer_generation(Q, finance_retrieve),
+                "qid": Q_copy["qid"],
+                "query": Q_copy["query"],
+                "generate": answer_generation(Q_copy, finance_retrieve),
                 "retrieve": int(finance_retrieve[0].metadata["source_id"]),
                 "category": finance_retrieve[0].metadata["category"],
             }
