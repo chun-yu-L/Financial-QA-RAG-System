@@ -5,6 +5,7 @@ import os
 from copy import deepcopy
 from datetime import datetime
 
+import torch
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
@@ -33,11 +34,16 @@ def main(question_set, doc_set):
     load_dotenv()
     client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
 
+    # 給 HuggingFaceEmbeddings 吃 cuda 用
+    model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else None
+
     ###### insurance ######
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="insurance_chunk",
-        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+        embedding=HuggingFaceEmbeddings(
+            model_name="BAAI/bge-m3", model_kwargs=model_kwargs
+        ),
         retrieval_mode=RetrievalMode.DENSE,
     )
 
@@ -52,7 +58,7 @@ def main(question_set, doc_set):
         insurance_search = dense_search_with_cross_encoder(
             vector_store=vector_store,
             question=Q,
-            k_dense=5,
+            k_dense=3,
             k_cross=1,
         )
 
@@ -70,21 +76,23 @@ def main(question_set, doc_set):
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="finance_recursive_chunk",
-        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+        embedding=HuggingFaceEmbeddings(
+            model_name="BAAI/bge-m3", model_kwargs=model_kwargs
+        ),
         retrieval_mode=RetrievalMode.DENSE,
     )
 
-    # finance_question_set = [
-    #     item for item in question_set["questions"] if item["category"] == "finance"
-    # ]
-    # finance_question_set = query_preprocessor(finance_question_set=finance_question_set)
-    # # Save the parsed query
-    # time_now = datetime.now().strftime("%Y_%m_%d_%H_%M")
-    # with open(f"parsed_query_{time_now}.json", "w") as Output:
-    #     json.dump(finance_question_set, Output, ensure_ascii=False, indent=4)
+    finance_question_set = [
+        item for item in question_set["questions"] if item["category"] == "finance"
+    ]
+    finance_question_set = query_preprocessor(finance_question_set=finance_question_set)
+    # Save the parsed query
+    time_now = datetime.now().strftime("%Y_%m_%d_%H_%M")
+    with open(f"parsed_query_{time_now}.json", "w") as Output:
+        json.dump(finance_question_set, Output, ensure_ascii=False, indent=4)
 
-    with open("parsed_query_2024_11_23_16_43.json", "r") as q:
-        finance_question_set = json.load(q)
+    # with open("parsed_query_2024_11_23_16_43.json", "r") as q:
+    #     finance_question_set = json.load(q)
 
     finance_answers = []
     for Q in tqdm(
@@ -94,13 +102,28 @@ def main(question_set, doc_set):
         finance_search = finance_main(vector_store, Q, doc_set, score_threshold=70)
         Q_copy = deepcopy(Q)
         Q_copy["source"] = [finance_search[0].metadata["source_id"]]
-        vector_store = QdrantVectorStore(
+        vector_store_table = QdrantVectorStore(
             client=client,
             collection_name="finance_table_and_summary",
-            embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+            embedding=HuggingFaceEmbeddings(
+                model_name="BAAI/bge-m3", model_kwargs=model_kwargs
+            ),
             retrieval_mode=RetrievalMode.DENSE,
         )
-        finance_retrieve = qdrant_dense_search(Q_copy, vector_store, k=1)
+
+        vector_store_chunk = QdrantVectorStore(
+            client=client,
+            collection_name="finance_recursive_chunk_1500",
+            embedding=HuggingFaceEmbeddings(
+                model_name="BAAI/bge-m3", model_kwargs=model_kwargs
+            ),
+            retrieval_mode=RetrievalMode.DENSE,
+        )
+
+        finance_retrieve_table = qdrant_dense_search(Q_copy, vector_store_table, k=1)
+        finance_retrieve_intext = qdrant_dense_search(Q_copy, vector_store_chunk, k=1)
+        finance_retrieve = finance_retrieve_table + finance_retrieve_intext
+
         finance_answers.append(
             {
                 "qid": Q_copy["qid"],
@@ -115,7 +138,9 @@ def main(question_set, doc_set):
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="qa_dense_e5",
-        embedding=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
+        embedding=HuggingFaceEmbeddings(
+            model_name="intfloat/multilingual-e5-large", model_kwargs=model_kwargs
+        ),
         retrieval_mode=RetrievalMode.DENSE,
     )
 

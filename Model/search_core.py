@@ -8,28 +8,27 @@ It includes a retry mechanism and defines classes and functions to facilitate
 document search, filtering, and ranking operations.
 """
 
-import json
-import os
+from copy import deepcopy
 from functools import wraps
 from time import sleep
 from typing import Dict, List, Optional, Sequence, Tuple, Union
-from copy import deepcopy
 
 import jieba
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
+import torch
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_qdrant import QdrantVectorStore, RetrievalMode
+from langchain_qdrant import QdrantVectorStore
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchValue
 from rank_bm25 import BM25Okapi
 from rapidfuzz import fuzz, process
-from tqdm import tqdm
+
+# 給 HuggingFace 模型吃 cuda 用
+model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else None
 
 
 def retry(retries: int = 3, delay: float = 1):
@@ -537,7 +536,9 @@ def crosss_encoder_rerank(
     Returns:
         Sequence[Document]: 經過模型重新排序後的文件列表。
     """
-    model = HuggingFaceCrossEncoder(model_name=cross_encoder_model)
+    model = HuggingFaceCrossEncoder(
+        model_name=cross_encoder_model, model_kwargs=model_kwargs
+    )
     compressor = CrossEncoderReranker(model=model, top_n=k)
     return compressor.compress_documents(documents=documents, query=question["query"])
 
@@ -566,7 +567,7 @@ def finance_main(
     fuzzy_result = deepcopy(search_engine.search(question, doc_set))
     fuzzy_result["query"] = fuzzy_result["parsed_query"]["scenario"]
     return dense_search_with_cross_encoder(
-        vector_store=vector_store, question=fuzzy_result, k_dense=5, k_cross=1
+        vector_store=vector_store, question=fuzzy_result, k_dense=3, k_cross=1
     )
 
 
