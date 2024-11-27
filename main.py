@@ -1,40 +1,19 @@
-"""
-Main execution script for the finance-related data retrieval project.
-
-This script loads question data, connects to Qdrant vector stores,
-and performs dense search with various preprocessors and retrievers.
-
-Requires:
-    - Environment variables specified in a .env file, particularly Qdrant URL.
-
-Modules:
-    - HuggingFaceEmbeddings
-    - QdrantVectorStore
-    - RetrievalMode
-    - qdrant_client
-    - tqdm
-    - query_preprocessor (finance-specific query preprocessing)
-    - dense_search_with_cross_encoder
-    - finance_main (main search function)
-    - qdrant_dense_search (Qdrant-based dense search)
-
-Attributes:
-    logging.basicConfig: Configures logging to log.txt for standardized logging.
-
-"""
-
 import argparse
 import json
 import logging
 import os
+from copy import deepcopy
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
+import torch
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
 from qdrant_client import QdrantClient
 from tqdm import tqdm
 
+from Model.ans_generator import answer_generation
 from Model.finanace_query_preprocess import query_preprocessor
 from Model.search_core import (
     dense_search_with_cross_encoder,
@@ -50,36 +29,43 @@ logging.basicConfig(
 )
 
 
-def main(question_set, doc_set):
+def create_embedding_model(
+    model_name: str = "BAAI/bge-m3", model_kwargs: Optional[Dict[str, Any]] = None
+) -> HuggingFaceEmbeddings:
     """
-    Main function to load question data, initialize Qdrant client,
-    and set up vector stores for various categories.
-
-    This function loads question examples from a JSON file, initializes
-    a QdrantClient with a specified timeout, and configures vector stores for
-    different search categories like insurance, finance, and faq.
+    Create and return a HuggingFaceEmbeddings instance with optional default settings.
 
     Args:
-        question_set: query questions with qid, query, and category
-        doc_set: finance {"id":"context"}
+        model_name (str): Name of the embedding model. Default is "BAAI/bge-m3".
+        model_kwargs (Optional[Dict[str, Any]]): Model configuration. If None, it defaults to {"device": "cuda"} if CUDA is available.
 
     Returns:
-        None
-
-    Raises:
-        FileNotFoundError: If the questions file is not found.
-        Exception: For any connection or initialization issues.
+        HuggingFaceEmbeddings: Preloaded embedding model instance.
     """
+    if model_kwargs is None:
+        model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else None
 
-    # qdrant vector store for different categories
-    load_dotenv()
-    client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
+    return HuggingFaceEmbeddings(model_name=model_name, model_kwargs=model_kwargs)
 
-    ###### insurance ######
+
+def process_insurance_questions(
+    question_set, client: QdrantClient, embedding_model
+) -> List[Dict[str, Any]]:
+    """
+    Process insurance-related questions
+
+    Args:
+        question_set: Dictionary containing questions
+        client: Qdrant client
+        embedding_model (HuggingFaceEmbeddings): Preloaded embedding model instance
+
+    Returns:
+        List of processed insurance answers
+    """
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="insurance_chunk",
-        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+        embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
 
@@ -94,22 +80,51 @@ def main(question_set, doc_set):
         insurance_search = dense_search_with_cross_encoder(
             vector_store=vector_store,
             question=Q,
-            k_dense=5,
+            k_dense=3,
+            k_cross=1,
         )
 
         insurance_answers.append(
             {
                 "qid": Q["qid"],
+                "query": Q["query"],
+                "generate": answer_generation(Q, insurance_search),
                 "retrieve": int(insurance_search[0].metadata["source_id"]),
                 "category": insurance_search[0].metadata["category"],
             }
         )
 
-    ###### finance #####
-    vector_store = QdrantVectorStore(
+    return insurance_answers
+
+
+def process_finance_questions(
+    question_set, doc_set, client: QdrantClient, embedding_model
+) -> List[Dict[str, Any]]:
+    """
+    Process finance-related questions
+
+    Args:
+        question_set: Dictionary containing questions
+        doc_set: Document set
+        client: Qdrant client
+        embedding_model (HuggingFaceEmbeddings): Preloaded embedding model instance
+
+    Returns:
+        List of processed finance answers
+    """
+    # Recursive chunk vector store
+    vector_store_chunk = QdrantVectorStore(
         client=client,
-        collection_name="finance_recursive_chunk",
-        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
+        collection_name="finance_recursive_chunk_1500",
+        embedding=embedding_model,
+        retrieval_mode=RetrievalMode.DENSE,
+    )
+
+    # Table and summary vector store
+    vector_store_table = QdrantVectorStore(
+        client=client,
+        collection_name="finance_table_and_summary",
+        embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
 
@@ -117,6 +132,7 @@ def main(question_set, doc_set):
         item for item in question_set["questions"] if item["category"] == "finance"
     ]
     finance_question_set = query_preprocessor(finance_question_set=finance_question_set)
+
     # Save the parsed query
     time_now = datetime.now().strftime("%Y_%m_%d_%H_%M")
     with open(f"parsed_query_{time_now}.json", "w") as Output:
@@ -127,20 +143,45 @@ def main(question_set, doc_set):
         finance_question_set,
         desc=f"Processing {finance_question_set[0]['category']} questions",
     ):
-        finance_search = finance_main(vector_store, Q, doc_set, score_threshold=70)
+        finance_search = finance_main(
+            vector_store_chunk, Q, doc_set, score_threshold=70
+        )
+        Q_copy = deepcopy(Q)
+        Q_copy["source"] = [finance_search[0].metadata["source_id"]]
+
+        finance_retrieve_table = qdrant_dense_search(Q_copy, vector_store_table, k=1)
+        finance_retrieve_intext = qdrant_dense_search(Q_copy, vector_store_chunk, k=1)
+        finance_retrieve = finance_retrieve_table + finance_retrieve_intext
+
         finance_answers.append(
             {
-                "qid": Q["qid"],
-                "retrieve": int(finance_search[0].metadata["source_id"]),
-                "category": finance_search[0].metadata["category"],
+                "qid": Q_copy["qid"],
+                "query": Q_copy["query"],
+                "generate": answer_generation(Q_copy, finance_retrieve),
+                "retrieve": int(finance_retrieve[0].metadata["source_id"]),
+                "category": finance_retrieve[0].metadata["category"],
             }
         )
 
-    ###### faq #####
+    return finance_answers
+
+
+def process_faq_questions(question_set, client: QdrantClient, embedding_model):
+    """
+    Process FAQ-related questions
+
+    Args:
+        question_set: Dictionary containing questions
+        client: Qdrant client
+        embedding_model (HuggingFaceEmbeddings): Preloaded embedding model instance
+
+    Returns:
+        List of processed FAQ answers
+    """
     vector_store = QdrantVectorStore(
         client=client,
         collection_name="qa_dense_e5",
-        embedding=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
+        embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
 
@@ -156,16 +197,51 @@ def main(question_set, doc_set):
         faq_answers.append(
             {
                 "qid": Q["qid"],
+                "query": Q["query"],
+                "generate": answer_generation(Q, faq_search),
                 "retrieve": int(faq_search[0].metadata["source_id"]),
                 "category": faq_search[0].metadata["category"],
             }
         )
 
+    return faq_answers
+
+
+def main(question_set, doc_set):
+    start_time = datetime.now()
+
+    load_dotenv()
+    client = QdrantClient(url=os.getenv("qdrant_url"), timeout=30)
+
+    ## insurance & finance
+    embedding_model_m3 = create_embedding_model(model_name="BAAI/bge-m3")
+
+    insurance_answers = process_insurance_questions(
+        question_set, doc_set, client, embedding_model_m3
+    )
+
+    finance_answers = process_finance_questions(
+        question_set, doc_set, client, embedding_model_m3
+    )
+
+    del embedding_model_m3
+    torch.cuda.empty_cache()
+
+    ## faq
+    embedding_model_e5 = create_embedding_model(
+        model_name="intfloat/multilingual-e5-large"
+    )
+    faq_answers = process_faq_questions(question_set, client, embedding_model_e5)
+
+    # concate and save
     answers = insurance_answers + finance_answers + faq_answers
 
-    with open("./retrieval_result.json", "w") as Output:
+    with open("./generation_result.json", "w") as Output:
         json.dump({"answers": answers}, Output, ensure_ascii=False, indent=4)
-        print("Done!")
+
+    end_time = datetime.now()
+
+    print(f"Total time: {end_time - start_time}")
 
 
 if __name__ == "__main__":
@@ -176,7 +252,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--questions_path",
         type=str,
-        default="./競賽資料集/dataset/preliminary/questions_example.json",
+        default="./複賽資料集說明/questions_example.json",
         help="Path to the questions JSON file",
     )
     parser.add_argument(
@@ -191,7 +267,7 @@ if __name__ == "__main__":
     with open(args.questions_path, "r") as q:
         question_set = json.load(q)
 
-    with open(args.docs_path, "r") as d:
+    with open(args.parsed_finance_path, "r") as d:
         doc_set = json.load(d)
 
     main(question_set, doc_set)

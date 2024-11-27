@@ -8,8 +8,7 @@ It includes a retry mechanism and defines classes and functions to facilitate
 document search, filtering, and ranking operations.
 """
 
-import json
-import os
+from copy import deepcopy
 from functools import wraps
 from time import sleep
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -17,18 +16,19 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 import jieba
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
+import torch
 from langchain.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_qdrant import QdrantVectorStore, RetrievalMode
+from langchain_qdrant import QdrantVectorStore
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import FieldCondition, Filter, MatchAny, MatchValue
 from rank_bm25 import BM25Okapi
 from rapidfuzz import fuzz, process
-from tqdm import tqdm
+
+# 給 HuggingFace 模型吃 cuda 用
+model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else None
 
 
 def retry(retries: int = 3, delay: float = 1):
@@ -406,9 +406,10 @@ class FuzzySearchEngine:
         else:
             matched_sources = [str(i) for i in question["source"]]
 
-        question["source"] = matched_sources
+        output_q = deepcopy(question)
+        output_q["source"] = matched_sources
 
-        return question
+        return output_q
 
 
 # DENSE SEARCH
@@ -535,7 +536,9 @@ def crosss_encoder_rerank(
     Returns:
         Sequence[Document]: 經過模型重新排序後的文件列表。
     """
-    model = HuggingFaceCrossEncoder(model_name=cross_encoder_model)
+    model = HuggingFaceCrossEncoder(
+        model_name=cross_encoder_model, model_kwargs=model_kwargs
+    )
     compressor = CrossEncoderReranker(model=model, top_n=k)
     return compressor.compress_documents(documents=documents, query=question["query"])
 
@@ -561,12 +564,10 @@ def finance_main(
     search_engine = FuzzySearchEngine(
         similarity_threshold=50, score_threshold=score_threshold, max_matches=3
     )
-    limited_question = search_engine.search(question, doc_set)
-
-    limited_question["query"] = limited_question["parsed_query"]["scenario"]
-
+    fuzzy_result = deepcopy(search_engine.search(question, doc_set))
+    fuzzy_result["query"] = fuzzy_result["parsed_query"]["scenario"]
     return dense_search_with_cross_encoder(
-        vector_store=vector_store, question=question, k_dense=5, k_cross=1
+        vector_store=vector_store, question=fuzzy_result, k_dense=3, k_cross=1
     )
 
 
@@ -641,67 +642,5 @@ def retrieve_document_by_source_ids(
 
 
 if __name__ == "__main__":
-    with open("./競賽資料集/dataset/preliminary/questions_example.json", "r") as q:
-        question_set = json.load(q)
-
-    # qdrant vector store for different categories
-    load_dotenv()
-    client = QdrantClient(url=os.getenv("qdrant_url"), timeout=60)
-    insurance_vector_store = QdrantVectorStore(
-        client=client,
-        collection_name="insurance_chunk",
-        embedding=HuggingFaceEmbeddings(model_name="BAAI/bge-m3"),
-        retrieval_mode=RetrievalMode.DENSE,
-    )
-    faq_vector_store = QdrantVectorStore(
-        client=client,
-        collection_name="qa_dense_e5",
-        embedding=HuggingFaceEmbeddings(model_name="intfloat/multilingual-e5-large"),
-        retrieval_mode=RetrievalMode.DENSE,
-    )
-
-    # insurance
-    insurance_data = [
-        item for item in question_set["questions"] if item["category"] == "insurance"
-    ]
-
-    insurance_answers = []
-    for Q in tqdm(
-        insurance_data, desc=f"Processing {insurance_data[0]['category']} questions"
-    ):
-        insurance_search = dense_search_with_cross_encoder(
-            vector_store=insurance_vector_store,
-            question=Q,
-            k_dense=5,
-        )
-
-        insurance_answers.append(
-            {
-                "qid": Q["qid"],
-                "retrieve": int(insurance_search[0].metadata["source_id"]),
-                "category": insurance_search[0].metadata["category"],
-            }
-        )
-
-    # faq
-    faq_data = [item for item in question_set["questions"] if item["category"] == "faq"]
-    faq_answers = []
-    for Q in tqdm(faq_data, desc=f"Processing {faq_data[0]['category']} questions"):
-        faq_search = qdrant_dense_search(
-            vector_store=faq_vector_store,
-            question=Q,
-            k=1,
-        )
-
-        faq_answers.append(
-            {
-                "qid": Q["qid"],
-                "retrieve": int(faq_search[0].metadata["source_id"]),
-                "category": faq_search[0].metadata["category"],
-            }
-        )
-
-    answers = insurance_answers + faq_answers
-
-    with open("./13_test.json", "w") as Output:
-        json.dump({"answers": answers}, Output, ensure_ascii=False, indent=4)
+    print("本模組是用於實現文件檢索與融合搜尋功能的工具包，請將其匯入至專案中使用。")
+    print("\n如果需要測試模組功能，建議撰寫自己的測試腳本來驗證特定功能。")

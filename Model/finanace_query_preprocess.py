@@ -32,7 +32,7 @@ class QueryDict(TypedDict):
     keyword: Annotated[List[str], ..., "關鍵字與專有名詞列表"]
 
 
-def create_finance_query_parser():
+def create_finance_query_parser(llm=None):
     """
     Creates a structured query parser for financial data requests, converting user queries into a structured format
     with fields like company name, year, quarter, main query, and relevant keywords. Uses a language model configured
@@ -41,14 +41,16 @@ def create_finance_query_parser():
     Returns:
         A prompt pipeline that processes financial queries into a structured format for easy data retrieval.
     """
-    llm = ChatLlamaCpp(
-        temperature=0,
-        model_path="qwen2.5-3b-instruct-q8_0.gguf",
-        n_ctx=2048,
-        max_token=512,
-        n_gpu_layers=-1,
-        n_batch=512,
-    )
+    if not llm:
+        llm = ChatLlamaCpp(
+            temperature=0.01,
+            top_p=0.95,
+            model_path="qwen2.5-3b-instruct-q8_0.gguf",
+            n_ctx=2048,
+            max_token=400,
+            n_gpu_layers=-1,
+            n_batch=512,
+        )
 
     structured_llm = llm.with_structured_output(QueryDict)
 
