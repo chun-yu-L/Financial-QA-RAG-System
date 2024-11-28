@@ -2,6 +2,17 @@
 
 此專案使用 Retrieval Augmented Generation (RAG) 的架構來進行金融問答，結合 Langchain 框架與 Qdrant 向量資料庫進行資料處理、檢索與生成，並採用了多階段檢索提高檢索準確度。
 
+## 專案流程圖
+### 資料前處理
+<div align="center">
+    <img src="assets\aicup_2024-Page-1.jpg", width=70%>
+</div>
+
+### RAG 流程
+<div align="center">
+    <img src="assets\aicup_2024-Page-2.jpg", width=70%>
+</div>
+
 ## 專案流程
 ### 1. 資料前處理 (Preprocess)
 - 取出 pdf 內文字並進行清洗、標註

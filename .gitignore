@@ -4,6 +4,7 @@
 
 # exceptions
 !*.py
+!*.jpg
 !README.md
 !env.template
 !requirements.txt
@@ -11,3 +12,4 @@
 !Model
 !Others
 !Evaluation
+!assets
