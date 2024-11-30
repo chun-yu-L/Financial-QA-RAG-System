@@ -49,7 +49,7 @@ class ChatLlamaCppManager:
             "n_ctx": 4096,
             "max_token": 400,
             "n_gpu_layers": -1,
-            "n_batch": 128,
+            "n_batch": 512,
             "verbose": False,
         }
 
