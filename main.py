@@ -29,7 +29,7 @@ def main(question_set, doc_set):
 
     results = []
 
-    for question in question_set:
+    for question in question_set["questions"]:
         initial_state = QAState(
             question=question,
             doc_set=doc_set,

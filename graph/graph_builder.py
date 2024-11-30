@@ -1,6 +1,8 @@
-from langgraph.graph import StateGraph, END
-from graph.nodes import route_question, faq_node, insurance_node, finance_node
+from langgraph.graph import END, StateGraph
+
+from graph.nodes import faq_node, finance_node, insurance_node, route_question
 from graph.state import QAState
+
 
 def build_workflow() -> callable:
     """
@@ -11,6 +13,11 @@ def build_workflow() -> callable:
     """
     # 創建一個工作流圖
     workflow = StateGraph(QAState)
+
+    # 添加起始節點
+    workflow.add_node("start", lambda state: state)
+    # 指定為起始節點
+    workflow.set_entry_point("start")
 
     # 添加處理節點
     workflow.add_node("process_insurance", insurance_node)

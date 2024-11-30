@@ -28,38 +28,31 @@ def create_embedding_model(
         HuggingFaceEmbeddings: Preloaded embedding model instance.
     """
     if model_kwargs is None:
-        model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else None
+        model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else {}
 
     return HuggingFaceEmbeddings(model_name=model_name, model_kwargs=model_kwargs)
 
 
 def route_question(state: QAState) -> str:
-    category = state["question"]["category"]
-    model_map = {
-        "insurance": "BAAI/bge-m3",
-        "finance": "BAAI/bge-m3",
-        "faq": "intfloat/multilingual-e5-large",
-    }
-
-    if category not in model_map:
-        raise ValueError(f"Unsupported category: {category}")
-
-    state["embedding_model"] = create_embedding_model(model_name=model_map[category])
-
     routing_map = {
         "insurance": "process_insurance",
         "finance": "process_finance",
         "faq": "process_faq",
     }
 
+    category = state["question"]["category"]
+    if category not in routing_map:
+        raise ValueError(f"Unsupported category: {category}")
+
     return routing_map[category]
 
 
 def insurance_node(state: QAState) -> QAState:
+    embedding_model = create_embedding_model(model_name="BAAI/bge-m3")
     vector_store = QdrantVectorStore(
         client=state["client"],
         collection_name="insurance_chunk",
-        embedding=state["embedding_model"],
+        embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
 
@@ -85,17 +78,19 @@ def finance_node(state: QAState) -> QAState:
     # query 預處理
     Q = query_preprocessor(finance_question_set=[state["question"]])[0]
 
+    embedding_model = create_embedding_model(model_name="BAAI/bge-m3")
+
     vector_store_chunk = QdrantVectorStore(
         client=state["client"],
         collection_name="finance_recursive_chunk_1500",
-        embedding=state["embedding_model"],
+        embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
 
     vector_store_table = QdrantVectorStore(
         client=state["client"],
         collection_name="finance_table_and_summary",
-        embedding=state["embedding_model"],
+        embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
 
@@ -121,10 +116,14 @@ def finance_node(state: QAState) -> QAState:
 
 
 def faq_node(state: QAState) -> QAState:
+    embedding_model = create_embedding_model(
+        model_name="intfloat/multilingual-e5-large"
+    )
+
     vector_store = QdrantVectorStore(
         client=state["client"],
         collection_name="qa_dense_e5",
-        embedding=state["embedding_model"],
+        embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
 
