@@ -24,12 +24,11 @@ def main(question_set, doc_set):
     load_dotenv()
     client = QdrantClient(url=os.getenv("qdrant_url"), timeout=30)
 
-    # 構建 workflow
-    app = build_workflow()
-
     results = []
 
     for question in question_set["questions"]:
+        # 構建 workflow
+        app = build_workflow()
         initial_state = QAState(
             question=question,
             doc_set=doc_set,

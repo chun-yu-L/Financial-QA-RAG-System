@@ -16,10 +16,11 @@ Functions:
 import json
 from typing import List
 
-from langchain_community.chat_models import ChatLlamaCpp
 from langchain_core.prompts import ChatPromptTemplate, FewShotChatMessagePromptTemplate
 from tqdm import tqdm
 from typing_extensions import Annotated, TypedDict
+
+from Model.llm import ChatLlamaCppManager
 
 
 class QueryDict(TypedDict):
@@ -32,7 +33,7 @@ class QueryDict(TypedDict):
     keyword: Annotated[List[str], ..., "關鍵字與專有名詞列表"]
 
 
-def create_finance_query_parser(llm=None):
+def create_finance_query_parser(llm_kwargs=None):
     """
     Creates a structured query parser for financial data requests, converting user queries into a structured format
     with fields like company name, year, quarter, main query, and relevant keywords. Uses a language model configured
@@ -41,16 +42,8 @@ def create_finance_query_parser(llm=None):
     Returns:
         A prompt pipeline that processes financial queries into a structured format for easy data retrieval.
     """
-    if not llm:
-        llm = ChatLlamaCpp(
-            temperature=0.01,
-            top_p=0.95,
-            model_path="qwen2.5-3b-instruct-q8_0.gguf",
-            n_ctx=2048,
-            max_token=400,
-            n_gpu_layers=-1,
-            n_batch=512,
-        )
+    llm_manager = ChatLlamaCppManager()
+    llm = llm_manager.get_instance(llm_kwargs)
 
     structured_llm = llm.with_structured_output(QueryDict)
 
