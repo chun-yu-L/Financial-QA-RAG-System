@@ -64,6 +64,9 @@ def insurance_node(state: QAState) -> QAState:
         k_cross=1,
     )
 
+    del embedding_model
+    torch.cuda.empty_cache()
+
     state["answer"] = {
         "qid": Q["qid"],
         "query": Q["query"],
@@ -77,6 +80,8 @@ def insurance_node(state: QAState) -> QAState:
 def finance_node(state: QAState) -> QAState:
     # query 預處理
     Q = query_preprocessor(finance_question_set=[state["question"]])[0]
+
+    torch.cuda.empty_cache()
 
     embedding_model = create_embedding_model(model_name="BAAI/bge-m3")
 
@@ -104,6 +109,9 @@ def finance_node(state: QAState) -> QAState:
     finance_retrieve_table = qdrant_dense_search(Q_copy, vector_store_table, k=1)
     finance_retrieve_intext = qdrant_dense_search(Q_copy, vector_store_chunk, k=1)
     finance_retrieve = finance_retrieve_table + finance_retrieve_intext
+
+    del embedding_model
+    torch.cuda.empty_cache()
 
     state["answer"] = {
         "qid": Q_copy["qid"],
@@ -133,6 +141,9 @@ def faq_node(state: QAState) -> QAState:
         question=Q,
         k=1,
     )
+
+    del embedding_model
+    torch.cuda.empty_cache()
 
     state["answer"] = {
         "qid": Q["qid"],

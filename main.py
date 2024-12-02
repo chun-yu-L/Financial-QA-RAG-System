@@ -1,9 +1,11 @@
 import argparse
+import gc
 import json
 import logging
 import os
 from datetime import datetime
 
+import torch
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 
@@ -39,6 +41,10 @@ def main(question_set, doc_set):
 
         result_state = app.invoke(initial_state)
         results.append(result_state["answer"])
+
+        del app
+        gc.collect()
+        torch.cuda.empty_cache()
 
     with open("./generation_result.json", "w") as Output:
         json.dump({"answers": results}, Output, ensure_ascii=False, indent=4)
