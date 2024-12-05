@@ -38,6 +38,10 @@ def answer_generation(question, retrieved_docs: List[Document], llm_kwargs=None)
     if not prompt:
         raise ValueError(f"Unsupported category: {question['category']}")
 
+    # 如果 retrieved_docs 是字符串，轉換為單元素列表
+    if isinstance(retrieved_docs, str):
+        retrieved_docs = [Document(page_content=retrieved_docs)]
+
     chain = (
         {
             "context": lambda x: format_docs(retrieved_docs),

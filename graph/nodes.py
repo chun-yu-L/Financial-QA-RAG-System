@@ -109,7 +109,7 @@ def finance_node(state: QAState) -> QAState:
     Q_copy = Q.copy()
     Q_copy["source"] = [finance_search[0].metadata["source_id"]]
 
-#    finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
+    #    finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
 
     del embedding_model
     torch.cuda.empty_cache()
@@ -120,7 +120,9 @@ def finance_node(state: QAState) -> QAState:
         source_ids=Q_copy["source"],
     )
 
-    state["doc_set"] = {item.metadata["page"]: item.page_content for item in retrieve_doc}
+    state["doc_set"] = {
+        item.metadata["page"]: item.page_content for item in retrieve_doc
+    }
 
     search_engine = FuzzySearchEngine(
         similarity_threshold=50, score_threshold=80, max_matches=3
@@ -137,8 +139,8 @@ def finance_node(state: QAState) -> QAState:
         "qid": Q_copy["qid"],
         "query": Q_copy["query"],
         "generate": answer_generation(Q_copy, finance_retrieve),
-        "retrieve": int(finance_retrieve[0].metadata["source_id"]),
-        "category": finance_retrieve[0].metadata["category"],
+        "retrieve": int(Q_copy["source"][0]),
+        "category": Q_copy["category"],
     }
     return state
 

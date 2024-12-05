@@ -420,7 +420,9 @@ class FuzzySearchEngine:
             search_query,
         )
 
-        return term_results["matched_text"] if not term_results.empty else None
+        if not term_results.empty:
+            return "\n".join(term_results["matched_text"].astype(str).tolist())
+        return None
 
 
 # DENSE SEARCH
