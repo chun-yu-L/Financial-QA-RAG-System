@@ -8,10 +8,13 @@ from graph.state import QAState
 from Model.ans_generator import answer_generation
 from Model.finanace_query_preprocess import query_preprocessor
 from Model.search_core import (
+    FuzzySearchEngine,
     dense_search_with_cross_encoder,
     finance_main,
     qdrant_dense_search,
+    retrieve_document_by_source_ids,
 )
+from Model.utils import count_tokens
 
 
 def create_embedding_model(
@@ -106,10 +109,29 @@ def finance_node(state: QAState) -> QAState:
     Q_copy = Q.copy()
     Q_copy["source"] = [finance_search[0].metadata["source_id"]]
 
-    finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
+#    finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
 
     del embedding_model
     torch.cuda.empty_cache()
+
+    retrieve_doc = retrieve_document_by_source_ids(
+        client=state["client"],
+        collection_name="finance_4o_extraction",
+        source_ids=Q_copy["source"],
+    )
+
+    state["doc_set"] = {item.metadata["page"]: item.page_content for item in retrieve_doc}
+
+    search_engine = FuzzySearchEngine(
+        similarity_threshold=50, score_threshold=80, max_matches=3
+    )
+
+    fuzzy_retrieve = search_engine.search_get_text(Q_copy, state["doc_set"])
+
+    if fuzzy_retrieve is not None and count_tokens(fuzzy_retrieve) < 6000:
+        finance_retrieve = fuzzy_retrieve
+    else:
+        finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
 
     state["answer"] = {
         "qid": Q_copy["qid"],

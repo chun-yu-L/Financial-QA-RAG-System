@@ -411,6 +411,17 @@ class FuzzySearchEngine:
 
         return output_q
 
+    def search_get_text(
+        self, question: QuestionDict, doc_set: Dict[str, str]
+    ) -> Optional[str]:
+        search_query = pd.Series(question["parsed_query"]["keyword"])
+        term_results, combined_results = self.fuzzy_search(
+            doc_set,
+            search_query,
+        )
+
+        return term_results["matched_text"] if not term_results.empty else None
+
 
 # DENSE SEARCH
 @retry(retries=3, delay=1)
