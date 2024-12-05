@@ -580,7 +580,7 @@ def finance_main(
     fuzzy_result = deepcopy(search_engine.search(question, doc_set))
     fuzzy_result["query"] = fuzzy_result["parsed_query"]["scenario"]
     return dense_search_with_cross_encoder(
-        vector_store=vector_store, question=fuzzy_result, k_dense=3, k_cross=1
+        vector_store=vector_store, question=fuzzy_result, k_dense=3, k_cross=3
     )
 
 

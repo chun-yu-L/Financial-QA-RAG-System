@@ -18,7 +18,7 @@ from Model.utils import count_tokens
 
 
 def create_embedding_model(
-    model_name: str = "BAAI/bge-m3", model_kwargs: Optional[Dict[str, Any]] = None
+    model_name: str = "BAAI/bge-m3", cache_folder: Optional[str] = "embedding_model_cache", model_kwargs: Optional[Dict[str, Any]] = None
 ) -> HuggingFaceEmbeddings:
     """
     Create and return a HuggingFaceEmbeddings instance with optional default settings.
@@ -33,7 +33,7 @@ def create_embedding_model(
     if model_kwargs is None:
         model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else {}
 
-    return HuggingFaceEmbeddings(model_name=model_name, model_kwargs=model_kwargs)
+    return HuggingFaceEmbeddings(model_name=model_name, cache_folder=cache_folder, model_kwargs=model_kwargs)
 
 
 def route_question(state: QAState) -> str:
@@ -125,7 +125,7 @@ def finance_node(state: QAState) -> QAState:
     }
 
     search_engine = FuzzySearchEngine(
-        similarity_threshold=50, score_threshold=80, max_matches=3
+        similarity_threshold=100, score_threshold=80, max_matches=3
     )
 
     fuzzy_retrieve = search_engine.search_get_text(Q_copy, state["doc_set"])
