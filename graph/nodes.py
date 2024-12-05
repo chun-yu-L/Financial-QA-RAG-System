@@ -94,7 +94,7 @@ def finance_node(state: QAState) -> QAState:
 
     vector_store_table = QdrantVectorStore(
         client=state["client"],
-        collection_name="finance_table_and_summary",
+        collection_name="finance_4o_extraction",
         embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
     )
@@ -106,9 +106,7 @@ def finance_node(state: QAState) -> QAState:
     Q_copy = Q.copy()
     Q_copy["source"] = [finance_search[0].metadata["source_id"]]
 
-    finance_retrieve_table = qdrant_dense_search(Q_copy, vector_store_table, k=1)
-    finance_retrieve_intext = qdrant_dense_search(Q_copy, vector_store_chunk, k=1)
-    finance_retrieve = finance_retrieve_table + finance_retrieve_intext
+    finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
 
     del embedding_model
     torch.cuda.empty_cache()

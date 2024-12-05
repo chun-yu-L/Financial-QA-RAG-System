@@ -35,10 +35,10 @@ class ChatLlamaCppManager:
         """
         default_params = {
             "temperature": 0.01,
-            "top_p": 0.95,
+            "top_p": 0.3,
             "model_path": "breeze-7b-instruct-v1_0-q8_0.gguf",
-            "n_ctx": 4096,
-            "max_token": 400,
+            "n_ctx": 8000,
+            "max_token": 350,
             "n_gpu_layers": -1,
             "n_batch": 512,
             "verbose": False,

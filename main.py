@@ -49,6 +49,15 @@ def main(question_set, doc_set):
     with open("./generation_result.json", "w") as Output:
         json.dump({"answers": results}, Output, ensure_ascii=False, indent=4)
 
+    output = {
+        "answers": [
+            {"qid": answer["qid"], "generate": answer["generate"]} for answer in results
+        ]
+    }
+
+    with open("pred.json", "w", encoding="utf-8") as f:
+        json.dump(output, f, ensure_ascii=False, indent=4)
+
     end_time = datetime.now()
 
     print(f"Total time: {end_time - start_time}")
