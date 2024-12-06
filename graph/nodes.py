@@ -100,27 +100,19 @@ def finance_retrieve(state: QAState) -> QAState:
         retrieval_mode=RetrievalMode.DENSE,
     )
 
-    finance_search = finance_main(
-        vector_store_chunk, Q, state["doc_set"], score_threshold=70
-    )
-
-    del embedding_model
-    torch.cuda.empty_cache()
-
-    state["question"]["source"] = list(
-        {item.metadata["source_id"] for item in finance_search}
-    )
-    return state
-
-
-def finance_node(state: QAState) -> QAState:
-    embedding_model = create_embedding_model(model_name="BAAI/bge-m3")
-
     vector_store_table = QdrantVectorStore(
         client=state["client"],
         collection_name="finance_4o_extraction",
         embedding=embedding_model,
         retrieval_mode=RetrievalMode.DENSE,
+    )
+
+    finance_search = finance_main(
+        vector_store_chunk, Q, state["doc_set"], score_threshold=70
+    )
+
+    state["question"]["source"] = list(
+        {item.metadata["source_id"] for item in finance_search}
     )
 
     retrieve_doc = retrieve_document_by_source_ids(
@@ -139,25 +131,37 @@ def finance_node(state: QAState) -> QAState:
 
     fuzzy_retrieve = search_engine.search_get_text(state["question"], state["doc_set"])
 
-    finance_retrieve = (
+    del embedding_model
+    torch.cuda.empty_cache()
+
+    state["retrieve_doc"] = (
         fuzzy_retrieve
         if fuzzy_retrieve and count_tokens(fuzzy_retrieve) < 6000
         else qdrant_dense_search(state["question"], vector_store_table, k=3)
     )
 
-    del embedding_model
-    torch.cuda.empty_cache()
+    return state
 
-    doc_check = document_contains_answer_check(state["question"], finance_retrieve)
 
+def llm_eval_retrieve(state: QAState) -> str:
+    doc_check = document_contains_answer_check(state["question"], state["retrieve_doc"])
+
+    if doc_check == "No":
+        state["answer"] = {
+            "qid": state["question"]["qid"],
+            "query": state["question"]["query"],
+            "generate": "不知道",
+            "retrieve": state["question"]["source"],
+            "category": state["question"]["category"],
+        }
+
+    return str(doc_check)
+
+def finance_generation(state: QAState) -> QAState:
     state["answer"] = {
         "qid": state["question"]["qid"],
         "query": state["question"]["query"],
-        "generate": (
-            answer_generation(state["question"], finance_retrieve)
-            if doc_check == "Yes"
-            else "不知道"
-        ),
+        "generate": answer_generation(state["question"], state["retrieve_doc"]),
         "retrieve": state["question"]["source"],
         "category": state["question"]["category"],
     }

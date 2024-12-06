@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
@@ -9,7 +9,9 @@ from Model.prompts import PROMPTS
 from Model.utils import format_docs
 
 
-def answer_generation(question, retrieved_docs: List[Document], llm_kwargs=None) -> str:
+def answer_generation(
+    question, retrieved_docs: Union[str, List[Document]], llm_kwargs=None
+) -> str:
     """
     根據問題和檢索的文件生成答案。
 

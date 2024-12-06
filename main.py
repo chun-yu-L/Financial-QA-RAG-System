@@ -34,7 +34,7 @@ def main(question_set, doc_set):
         initial_state = QAState(
             question=question,
             doc_set=doc_set,
-            embedding_model=None,
+            retrieve_doc=None,
             client=client,
             answer={},
         )

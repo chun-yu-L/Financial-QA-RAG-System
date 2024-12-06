@@ -1,6 +1,13 @@
 from langgraph.graph import END, StateGraph
 
-from graph.nodes import faq_node, finance_node, finance_retrieve, insurance_node, route_question
+from graph.nodes import (
+    faq_node,
+    finance_generation,
+    finance_retrieve,
+    insurance_node,
+    llm_eval_retrieve,
+    route_question,
+)
 from graph.state import QAState
 
 
@@ -32,14 +39,25 @@ def build_workflow() -> callable:
 
     # 添加處理節點
     workflow.add_node("process_insurance", insurance_node)
-    workflow.add_node("finance_retrieve", finance_retrieve)
-    workflow.add_node("process_finance", finance_node)
     workflow.add_node("process_faq", faq_node)
 
     # 為每個節點設置結束點
     workflow.add_edge("process_insurance", END)
-    workflow.add_edge("finance_retrieve", "process_finance")
-    workflow.add_edge("process_finance", END)
     workflow.add_edge("process_faq", END)
+
+    # finance 流程
+    workflow.add_node("finance_retrieve", finance_retrieve)
+    workflow.add_node("finance_generation", finance_generation)
+
+    workflow.add_conditional_edges(
+        "finance_retrieve",
+        llm_eval_retrieve,
+        {
+            "No": END,
+            "Yes": "finance_generation",
+        },
+    )
+
+    workflow.add_edge("finance_generation", END)
 
     return workflow.compile()
