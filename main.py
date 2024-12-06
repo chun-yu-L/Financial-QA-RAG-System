@@ -21,6 +21,28 @@ logging.basicConfig(
 
 
 def main(question_set, doc_set):
+    """
+    Main function to generate answers.
+
+    This function takes a question set and a document set, construct a workflow graph,
+    and invokes the graph to generate answers for each question.
+
+    The results are stored in a JSON file named "generation_result.json"
+    and "pred.json".
+
+    Args:
+        question_set (Dict[str, Any]): A dictionary containing question data.
+            The dictionary should contain a key "questions" whose value is a list
+            of dictionaries, each containing a question. Each question dictionary
+            should contain at least two keys: "qid" and "query".
+        doc_set (Dict[str, Any]): A dictionary containing document data.
+            The dictionary should contain a key "docs" whose value is a list of
+            dictionaries, each containing a document. Each document dictionary
+            should contain at least one key: "id".
+
+    Returns:
+        None
+    """
     start_time = datetime.now()
 
     load_dotenv()

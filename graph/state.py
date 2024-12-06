@@ -1,3 +1,7 @@
+"""
+流程中傳遞資訊用的類別物件
+"""
+
 from typing import Any, Dict, List, Union
 
 from langchain_core.documents import Document
