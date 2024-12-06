@@ -563,7 +563,7 @@ def finance_main(
     score_threshold: float = 90,
 ) -> List[Document]:
     """
-    finance 的搜尋引擎，首先使用 fuzzy search 來初步 filter 文件，然後使用 dense vector search with cross encoder 進一步限縮範圍。
+    finance 的搜尋引擎，首先使用 fuzzy search 來初步 filter 文件，然後使用 dense vector search 進一步限縮範圍。
 
     Args:
         vector_store (QdrantVectorStore): Qdrant 的向量庫實例。
@@ -579,9 +579,7 @@ def finance_main(
     )
     fuzzy_result = deepcopy(search_engine.search(question, doc_set))
     fuzzy_result["query"] = fuzzy_result["parsed_query"]["scenario"]
-    return dense_search_with_cross_encoder(
-        vector_store=vector_store, question=fuzzy_result, k_dense=3, k_cross=3
-    )
+    return qdrant_dense_search(vector_store=vector_store, question=fuzzy_result, k=3)
 
 
 def dense_search_with_cross_encoder(

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Literal
 
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
@@ -56,7 +56,7 @@ class DocumentContainAnswer(BaseModel):
 
 def document_contains_answer_check(
     question, retrieved_docs: List[Document], llm_kwargs=None
-):
+) -> Literal["Yes", "No"]:
     """
     使用 LLM 判斷當前文檔是否包含解答。
 

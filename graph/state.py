@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 from langchain_core.documents import Document
 from qdrant_client import QdrantClient

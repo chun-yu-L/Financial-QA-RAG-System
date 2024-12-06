@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
 import torch
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -9,7 +9,6 @@ from Model.ans_generator import answer_generation
 from Model.finanace_query_preprocess import query_preprocessor
 from Model.search_core import (
     FuzzySearchEngine,
-    dense_search_with_cross_encoder,
     finance_main,
     qdrant_dense_search,
     retrieve_document_by_source_ids,
@@ -65,11 +64,10 @@ def insurance_node(state: QAState) -> QAState:
     )
 
     Q = state["question"]
-    insurance_search = dense_search_with_cross_encoder(
+    insurance_search = qdrant_dense_search(
         vector_store=vector_store,
         question=Q,
-        k_dense=3,
-        k_cross=1,
+        k=3,
     )
 
     del embedding_model
@@ -131,31 +129,51 @@ def finance_retrieve(state: QAState) -> QAState:
 
     fuzzy_retrieve = search_engine.search_get_text(state["question"], state["doc_set"])
 
+    k = 3  # 初始 k 值
+    while True:
+        state["retrieve_doc"] = (
+            fuzzy_retrieve
+            if fuzzy_retrieve and count_tokens(fuzzy_retrieve) < 6000
+            else qdrant_dense_search(state["question"], vector_store_table, k=k)
+        )
+        
+        # 判斷 retrieve_doc 的類型，並計算 token 數量
+        if isinstance(state["retrieve_doc"], str):
+            token_count = count_tokens(state["retrieve_doc"])
+        elif isinstance(state["retrieve_doc"], list):
+            # 假設 List[Document]，將其內容合併後再計算 token
+            combined_text = " ".join(doc.page_content for doc in state["retrieve_doc"])
+            token_count = count_tokens(combined_text)
+        else:
+            raise TypeError("state['retrieve_doc'] 的類型無法處理")
+
+        # 若 token 數量小於 6000 或 k 減少到 1，結束迴圈
+        if token_count < 6000 or k == 1:
+            break
+
+        # 遞減 k 值
+        k -= 1
+
     del embedding_model
     torch.cuda.empty_cache()
-
-    state["retrieve_doc"] = (
-        fuzzy_retrieve
-        if fuzzy_retrieve and count_tokens(fuzzy_retrieve) < 6000
-        else qdrant_dense_search(state["question"], vector_store_table, k=3)
-    )
 
     return state
 
 
-def llm_eval_retrieve(state: QAState) -> str:
-    doc_check = document_contains_answer_check(state["question"], state["retrieve_doc"])
+def llm_eval_retrieve(state: QAState) -> Literal["yes", "no"]:
+    return document_contains_answer_check(state["question"], state["retrieve_doc"])
 
-    if doc_check == "No":
-        state["answer"] = {
-            "qid": state["question"]["qid"],
-            "query": state["question"]["query"],
-            "generate": "不知道",
-            "retrieve": state["question"]["source"],
-            "category": state["question"]["category"],
-        }
 
-    return str(doc_check)
+def i_dont_know(state: QAState) -> QAState:
+    state["answer"] = {
+        "qid": state["question"]["qid"],
+        "query": state["question"]["query"],
+        "generate": "不知道",
+        "retrieve": state["question"]["source"],
+        "category": state["question"]["category"],
+    }
+    return state
+
 
 def finance_generation(state: QAState) -> QAState:
     state["answer"] = {

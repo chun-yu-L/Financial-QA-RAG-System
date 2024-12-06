@@ -7,6 +7,7 @@ from graph.nodes import (
     insurance_node,
     llm_eval_retrieve,
     route_question,
+    i_dont_know,
 )
 from graph.state import QAState
 
@@ -48,16 +49,18 @@ def build_workflow() -> callable:
     # finance 流程
     workflow.add_node("finance_retrieve", finance_retrieve)
     workflow.add_node("finance_generation", finance_generation)
+    workflow.add_node("I don't know", i_dont_know)
 
     workflow.add_conditional_edges(
         "finance_retrieve",
         llm_eval_retrieve,
         {
-            "No": END,
+            "No": "I don't know",
             "Yes": "finance_generation",
         },
     )
 
     workflow.add_edge("finance_generation", END)
+    workflow.add_edge("I don't know", END)
 
     return workflow.compile()
