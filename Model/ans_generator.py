@@ -6,10 +6,7 @@ from langchain_core.runnables import RunnablePassthrough
 
 from Model.llm import ChatLlamaCppManager
 from Model.prompts import PROMPTS
-
-
-def format_docs(docs: List[Document]):
-    return "\n".join(doc.page_content for doc in docs)
+from Model.utils import format_docs
 
 
 def answer_generation(question, retrieved_docs: List[Document], llm_kwargs=None) -> str:

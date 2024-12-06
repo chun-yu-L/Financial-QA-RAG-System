@@ -1,6 +1,6 @@
 from langgraph.graph import END, StateGraph
 
-from graph.nodes import faq_node, finance_node, insurance_node, route_question
+from graph.nodes import faq_node, finance_node, finance_retrieve, insurance_node, route_question
 from graph.state import QAState
 
 
@@ -19,24 +19,26 @@ def build_workflow() -> callable:
     # 指定為起始節點
     workflow.set_entry_point("start")
 
-    # 添加處理節點
-    workflow.add_node("process_insurance", insurance_node)
-    workflow.add_node("process_finance", finance_node)
-    workflow.add_node("process_faq", faq_node)
-
     # 定義從起始點的條件邊
     workflow.add_conditional_edges(
         "start",  # 起始點
         route_question,  # 用於判斷路由的函數
         {
             "process_insurance": "process_insurance",
-            "process_finance": "process_finance",
+            "process_finance": "finance_retrieve",
             "process_faq": "process_faq",
         },
     )
 
+    # 添加處理節點
+    workflow.add_node("process_insurance", insurance_node)
+    workflow.add_node("finance_retrieve", finance_retrieve)
+    workflow.add_node("process_finance", finance_node)
+    workflow.add_node("process_faq", faq_node)
+
     # 為每個節點設置結束點
     workflow.add_edge("process_insurance", END)
+    workflow.add_edge("finance_retrieve", "process_finance")
     workflow.add_edge("process_finance", END)
     workflow.add_edge("process_faq", END)
 

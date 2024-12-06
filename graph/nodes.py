@@ -15,10 +15,13 @@ from Model.search_core import (
     retrieve_document_by_source_ids,
 )
 from Model.utils import count_tokens
+from Model.retrieval_eval import document_contains_answer_check
 
 
 def create_embedding_model(
-    model_name: str = "BAAI/bge-m3", cache_folder: Optional[str] = "embedding_model_cache", model_kwargs: Optional[Dict[str, Any]] = None
+    model_name: str = "BAAI/bge-m3",
+    cache_folder: Optional[str] = "embedding_model_cache",
+    model_kwargs: Optional[Dict[str, Any]] = None,
 ) -> HuggingFaceEmbeddings:
     """
     Create and return a HuggingFaceEmbeddings instance with optional default settings.
@@ -33,7 +36,9 @@ def create_embedding_model(
     if model_kwargs is None:
         model_kwargs = {"device": "cuda"} if torch.cuda.is_available() else {}
 
-    return HuggingFaceEmbeddings(model_name=model_name, cache_folder=cache_folder, model_kwargs=model_kwargs)
+    return HuggingFaceEmbeddings(
+        model_name=model_name, cache_folder=cache_folder, model_kwargs=model_kwargs
+    )
 
 
 def route_question(state: QAState) -> str:
@@ -80,7 +85,7 @@ def insurance_node(state: QAState) -> QAState:
     return state
 
 
-def finance_node(state: QAState) -> QAState:
+def finance_retrieve(state: QAState) -> QAState:
     # query 預處理
     Q = query_preprocessor(finance_question_set=[state["question"]])[0]
 
@@ -95,6 +100,22 @@ def finance_node(state: QAState) -> QAState:
         retrieval_mode=RetrievalMode.DENSE,
     )
 
+    finance_search = finance_main(
+        vector_store_chunk, Q, state["doc_set"], score_threshold=70
+    )
+
+    del embedding_model
+    torch.cuda.empty_cache()
+
+    state["question"]["source"] = list(
+        {item.metadata["source_id"] for item in finance_search}
+    )
+    return state
+
+
+def finance_node(state: QAState) -> QAState:
+    embedding_model = create_embedding_model(model_name="BAAI/bge-m3")
+
     vector_store_table = QdrantVectorStore(
         client=state["client"],
         collection_name="finance_4o_extraction",
@@ -102,22 +123,10 @@ def finance_node(state: QAState) -> QAState:
         retrieval_mode=RetrievalMode.DENSE,
     )
 
-    finance_search = finance_main(
-        vector_store_chunk, Q, state["doc_set"], score_threshold=70
-    )
-
-    Q_copy = Q.copy()
-    Q_copy["source"] = [finance_search[0].metadata["source_id"]]
-
-    #    finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
-
-    del embedding_model
-    torch.cuda.empty_cache()
-
     retrieve_doc = retrieve_document_by_source_ids(
         client=state["client"],
         collection_name="finance_4o_extraction",
-        source_ids=Q_copy["source"],
+        source_ids=state["question"]["source"],
     )
 
     state["doc_set"] = {
@@ -128,19 +137,29 @@ def finance_node(state: QAState) -> QAState:
         similarity_threshold=100, score_threshold=80, max_matches=3
     )
 
-    fuzzy_retrieve = search_engine.search_get_text(Q_copy, state["doc_set"])
+    fuzzy_retrieve = search_engine.search_get_text(state["question"], state["doc_set"])
 
-    if fuzzy_retrieve is not None and count_tokens(fuzzy_retrieve) < 6000:
-        finance_retrieve = fuzzy_retrieve
-    else:
-        finance_retrieve = qdrant_dense_search(Q_copy, vector_store_table, k=3)
+    finance_retrieve = (
+        fuzzy_retrieve
+        if fuzzy_retrieve and count_tokens(fuzzy_retrieve) < 6000
+        else qdrant_dense_search(state["question"], vector_store_table, k=3)
+    )
+
+    del embedding_model
+    torch.cuda.empty_cache()
+
+    doc_check = document_contains_answer_check(state["question"], finance_retrieve)
 
     state["answer"] = {
-        "qid": Q_copy["qid"],
-        "query": Q_copy["query"],
-        "generate": answer_generation(Q_copy, finance_retrieve),
-        "retrieve": int(Q_copy["source"][0]),
-        "category": Q_copy["category"],
+        "qid": state["question"]["qid"],
+        "query": state["question"]["query"],
+        "generate": (
+            answer_generation(state["question"], finance_retrieve)
+            if doc_check == "Yes"
+            else "不知道"
+        ),
+        "retrieve": state["question"]["source"],
+        "category": state["question"]["category"],
     }
     return state
 
