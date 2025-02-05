@@ -195,6 +195,13 @@ def process_images_in_batches(
 
 def main():
     # Azure OpenAI Configuration
+    """
+    Main entry point for the script.
+    It reads a file containing a list of pdf documents,
+    converts each pdf page to an image,
+    and uses the Azure OpenAI GPT-4o model to generate text from the images.
+    The output is saved in a directory as json files.
+    """
     azure_config = {
         "azure_endpoint": os.getenv("AZURE_OPENAI_ENDPOINT"),
         "api_key": os.getenv("AZURE_OPENAI_API_KEY"),

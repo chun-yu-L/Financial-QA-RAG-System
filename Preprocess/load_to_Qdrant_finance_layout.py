@@ -13,6 +13,20 @@ from tqdm import tqdm
 
 
 def process_json(file_path: str) -> List[tuple[Document, str]]:
+    """
+    Processes a JSON file from a given file path and returns a list of Document objects and their corresponding IDs.
+    
+    The JSON file is expected to have the following structure:
+    {
+        "source_id_page": "content"
+    }
+    
+    Where "source_id_page" is a string of the format "source_id_page" and "content" is the page content.
+    
+    The function returns a list of tuples, where each tuple contains a Document object and its corresponding ID.
+    The Document object contains the page content and metadata containing the source ID, page, category and file source.
+    The ID is a randomly generated UUID.
+    """
     with open(file_path, "r", encoding="utf-8") as file:
         data = json.load(file)
 

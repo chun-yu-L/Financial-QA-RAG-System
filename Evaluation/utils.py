@@ -2,6 +2,9 @@ from openai import AzureOpenAI
 import logging
 
 def get_prompt():
+    """
+    Return the prompt and example strings for the evaluation task.
+    """
     INSTRUCTIONS = """
     # 任務:
     你是專業的繁體中文助手，你會得到一個問題、一個模型預測和一個真實答案列表，判斷模型預測是否與真實答案列表中的任何答案匹配。按照以下步驟進行判斷。
@@ -33,6 +36,16 @@ def get_prompt():
 
 class REFEREE_Model():
     def __init__(self, azure_deployment_name, azure_openai_api_key, api_version, azure_endpoint):
+        
+        """
+        Initialize the REFEREE model with the given parameters.
+
+        Parameters:
+        azure_deployment_name (str): The name of the Azure OpenAI deployment.
+        azure_openai_api_key (str): The API key for Azure OpenAI.
+        api_version (str): The version of the Azure OpenAI API.
+        azure_endpoint (str): The endpoint URL of the Azure OpenAI API.
+        """
         self.gpt_engine = azure_deployment_name
         self.gpt_client = AzureOpenAI(
                 api_key=azure_openai_api_key,  
@@ -59,6 +72,16 @@ class REFEREE_Model():
 
 
     def generate_response(self, messages, idx):
+        """
+        依據傳入的系統提示、問題、標準答案與模型預測答案，使用 GPT 產生回應。
+
+        Args:
+            messages (list): 系統提示、問題、標準答案與模型預測答案的列表
+            idx (int): 問題的 id
+
+        Returns:
+            str: GPT 產生的回應
+        """
         logging.basicConfig(level=logging.INFO, filename='log_generate_response.txt',
             format='[%(asctime)s %(levelname)-8s] %(message)s',
             datefmt='%Y%m%d %H:%M:%S',

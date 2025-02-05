@@ -41,6 +41,18 @@ def create_embedding_model(
 
 
 def route_question(state: QAState) -> str:
+    """
+    Route a question to the appropriate processing function based on the category.
+
+    Args:
+        state: QAState containing the question to route.
+
+    Returns:
+        The name of the processing function to call.
+
+    Raises:
+        ValueError: If the category is unknown.
+    """
     routing_map = {
         "insurance": "process_insurance",
         "finance": "process_finance",
@@ -55,6 +67,15 @@ def route_question(state: QAState) -> str:
 
 
 def insurance_node(state: QAState) -> QAState:
+    """
+    Process an insurance question and return the answer.
+
+    Args:
+        state: QAState containing the question to process.
+
+    Returns:
+        QAState with the processed answer.
+    """
     embedding_model = create_embedding_model(model_name="BAAI/bge-m3")
     vector_store = QdrantVectorStore(
         client=state["client"],
@@ -84,6 +105,22 @@ def insurance_node(state: QAState) -> QAState:
 
 
 def finance_retrieve(state: QAState) -> QAState:
+    """
+    Process a finance-related question to retrieve relevant documents and update the QA state.
+
+    Args:
+        state (QAState): The current QA state containing the question and other necessary data.
+
+    Returns:
+        QAState: The updated QA state with retrieved documents and additional processing results.
+
+    This function preprocesses the finance question, initializes embedding models, and performs
+    document retrieval using both chunk and table vector stores. It applies a fuzzy search engine
+    for preliminary retrieval and adjusts the number of documents retrieved based on token count
+    constraints. The function ensures efficient memory usage by clearing caches and deleting models
+    when no longer needed.
+    """
+
     # query 預處理
     Q = query_preprocessor(finance_question_set=[state["question"]])[0]
 
@@ -136,7 +173,7 @@ def finance_retrieve(state: QAState) -> QAState:
             if fuzzy_retrieve and count_tokens(fuzzy_retrieve) < 6000
             else qdrant_dense_search(state["question"], vector_store_table, k=k)
         )
-        
+
         # 判斷 retrieve_doc 的類型，並計算 token 數量
         if isinstance(state["retrieve_doc"], str):
             token_count = count_tokens(state["retrieve_doc"])
@@ -161,10 +198,30 @@ def finance_retrieve(state: QAState) -> QAState:
 
 
 def llm_eval_retrieve(state: QAState) -> Literal["yes", "no"]:
+    """
+    Evaluates whether the retrieved document contains the answer to the question
+    using a large language model (LLM).
+
+    Args:
+        state (QAState): The state of the graph, containing the question and retrieved document.
+
+    Returns:
+        Literal["yes", "no"]: Whether the retrieved document contains the answer to the question.
+    """
     return document_contains_answer_check(state["question"], state["retrieve_doc"])
 
 
 def i_dont_know(state: QAState) -> QAState:
+    """
+    Handles cases where the answer to the question is unknown.
+
+    Args:
+        state (QAState): The current state containing the question data.
+
+    Returns:
+        QAState: The updated state with an answer indicating the answer is unknown.
+    """
+
     state["answer"] = {
         "qid": state["question"]["qid"],
         "query": state["question"]["query"],
@@ -176,6 +233,15 @@ def i_dont_know(state: QAState) -> QAState:
 
 
 def finance_generation(state: QAState) -> QAState:
+    """
+    生成財務問題的答案。
+
+    Args:
+        state (QAState): QAState 實例，包含問題和檢索的文件。
+
+    Returns:
+        QAState: 更新的 QAState 實例，包括生成的答案。
+    """
     state["answer"] = {
         "qid": state["question"]["qid"],
         "query": state["question"]["query"],
@@ -187,6 +253,15 @@ def finance_generation(state: QAState) -> QAState:
 
 
 def faq_node(state: QAState) -> QAState:
+    """
+    Processes a FAQ question and returns the answer.
+
+    Args:
+        state (QAState): QAState containing the question to process.
+
+    Returns:
+        QAState: Updated QAState with the answer to the question.
+    """
     embedding_model = create_embedding_model(
         model_name="intfloat/multilingual-e5-large"
     )

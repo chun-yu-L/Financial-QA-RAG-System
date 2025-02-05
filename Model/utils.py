@@ -11,4 +11,5 @@ def count_tokens(text: str) -> int:
 
 
 def format_docs(docs: List[Document]):
+    """Formats a list of documents into a single string."""
     return "\n".join(doc.page_content for doc in docs)

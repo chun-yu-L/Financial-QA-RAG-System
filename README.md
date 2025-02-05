@@ -14,19 +14,25 @@
 </div>
 
 ## 專案流程
-### 1. 資料前處理 (Preprocess)
+### 1. 資料前處理
 - 取出 pdf 內文字並進行清洗、標註
 
 - 將大段文字切割為小塊 (chunking) 並匯入 Qdrant 向量資料庫中
 
 - 此步驟為獨立執行，未包含於 `main.py` 中
 
-### 2. 檔案檢索 (Model)
+### 2. 檔案檢索
 - 透過 Qdrant 進行密集向量檢索，取得最能回答 query 的文件與編號
 
 - 對於 insurance 資料進一步透過 cross encoder reranker 進行重排，提高檢索準確度
 
-- 針對 finance 相關查詢，先利用 llama-cpp-python 跑地端小型 LLM 進行解析。接著用提取出的關鍵字進行模糊搜尋快速找出關鍵財報文件。若多個文檔符合關鍵字，搭配 dense search 與 reranker 做語義檢索取得最相關文件
+- 針對 finance 相關查詢，先利用 LLM 進行解析。接著用提取出的關鍵字進行模糊搜尋快速找出關鍵財報文件。若多個文檔符合關鍵字，搭配 dense search 與 reranker 做語義檢索取得最相關文件
+
+### 3. 生成回覆
+- 將檢索到的文檔交給 LLM 生成回應
+
+- 若 LLM 判斷文檔不含解答，則回覆"不知道"
+
 
 ## 環境設置
 1. 環境需求
@@ -42,7 +48,8 @@
         - `.env` 設置連線參數
 
 2. 模型下載  
-本專案使用 Qwen2.5-3B-Instruct-GGUF 模型進行財報相關 query 前處理。使用前先至 [HuggingFace](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF) 下載對應模型並放置於頂層資料夾
+本專案使用 Breeze-7B-Instruct-v1_0-Q8_0-GGUF 模型。使用前先至 [HuggingFace](https://huggingface.co/Chun-Yu/Breeze-7B-Instruct-v1_0-Q8_0-GGUF/) 下載對應模型並放置於頂層資料夾
+
 
 ## 使用說明
 ### 資料前處理
@@ -74,12 +81,13 @@
     python split_insurance_section.py
     ```
 
-### 啟動查詢檢索
-`main.py` 包含查詢的預處理與檢索流程。執行指令如下：
+### 啟動查詢檢索生成
+`main.py` 包含查詢的預處理、檢索流程、答案生成。執行指令如下：
 ```bash
 python main.py --questions_path {path_to_question} --parsed_finance_path {path_to_finance_json}
 ```
-- 執行完會產生 `retrieval_result.json` 檔案為檢索結果
+- 執行完會產生 `generation_result.json` 檔案為最終檢索與生成結果
+
 
 ## 結果評估
 ### 檢索準確度
